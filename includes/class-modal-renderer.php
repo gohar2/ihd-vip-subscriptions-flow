@@ -284,6 +284,15 @@ class IHD_VIP_Modal_Renderer {
             #ihd-vip-checkout-container .woocommerce-checkout {
                 max-width: 100%;
             }
+
+            /* ─── Hide any remaining WCS switch links (CSS fallback) ─── */
+            /* WCS renders per-item switch links with various class patterns */
+            .subscription_details .wcs-switch-link,
+            .order_item a[href*="switch-subscription"],
+            .woocommerce-orders-table a[href*="switch-subscription"],
+            td.order-actions a[href*="switch-subscription"] {
+                display: none !important;
+            }
         </style>
         <?php
     }
