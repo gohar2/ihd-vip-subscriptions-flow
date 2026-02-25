@@ -12,8 +12,8 @@ class IHD_VIP_Subscription_Actions {
     /**
      * Override subscription actions on the My Account page.
      *
-     * - Replace Cancel action URL with modal trigger.
-     * - Inject Upgrade/Downgrade button for switchable subscriptions.
+     * WCS renders actions as: <a href="{url}" class="button {key}">{name}</a>
+     * The array key becomes the CSS class — NOT any 'class' key in the array.
      *
      * @param array           $actions      Existing subscription actions.
      * @param WC_Subscription $subscription The subscription object.
@@ -26,15 +26,19 @@ class IHD_VIP_Subscription_Actions {
             return $actions;
         }
 
+        $sub_id = $subscription->get_id();
+
         // ─── A) Replace Cancel action with modal trigger ───
+        // URL becomes #ihd-vip-cancel-{ID} so JS can extract the subscription ID.
         if ( isset( $actions['cancel'] ) ) {
-            $actions['cancel']['url'] = '#ihd-vip-cancel';
-            $actions['cancel']['class'] = isset( $actions['cancel']['class'] )
-                ? $actions['cancel']['class'] . ' ihd-vip-cancel-trigger'
-                : 'ihd-vip-cancel-trigger';
+            $actions['cancel']['url'] = '#ihd-vip-cancel-' . $sub_id;
         }
 
-        // ─── B) Inject Upgrade/Downgrade button for switchable items ───
+        // ─── B) Remove default WCS switch action ───
+        // WCS adds 'switch' key which links to the product page — we replace it entirely.
+        unset( $actions['switch'] );
+
+        // ─── C) Inject our Switch button for switchable items ───
         $has_switchable = false;
 
         foreach ( $subscription->get_items() as $item_id => $item ) {
@@ -47,9 +51,8 @@ class IHD_VIP_Subscription_Actions {
 
         if ( $has_switchable ) {
             $actions['ihd_vip_switch'] = array(
-                'url'   => '#ihd-vip-switch',
-                'name'  => 'Upgrade / Downgrade',
-                'class' => 'ihd-vip-switch-trigger button',
+                'url'  => '#ihd-vip-switch-' . $sub_id,
+                'name' => 'Upgrade / Downgrade',
             );
         }
 

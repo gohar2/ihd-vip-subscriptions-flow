@@ -18,15 +18,14 @@ class IHD_VIP_Modal_Renderer {
             return;
         }
 
-        $nonce           = wp_create_nonce( 'ihd_vip_nonce' );
-        $ajax_url        = admin_url( 'admin-ajax.php' );
-        $subscription_id = absint( get_query_var( 'view-subscription' ) );
+        $nonce    = wp_create_nonce( 'ihd_vip_nonce' );
+        $ajax_url = admin_url( 'admin-ajax.php' );
 
         $this->render_styles();
         $this->render_overlay();
         $this->render_cancel_modal();
         $this->render_switch_modal();
-        $this->render_scripts( $nonce, $ajax_url, $subscription_id );
+        $this->render_scripts( $nonce, $ajax_url );
     }
 
     /**
@@ -291,8 +290,14 @@ class IHD_VIP_Modal_Renderer {
 
     /**
      * Inline JS for modal interactions and AJAX calls.
+     *
+     * WCS renders action buttons as:
+     *   <a href="#ihd-vip-cancel-{ID}" class="button cancel">Cancel</a>
+     *   <a href="#ihd-vip-switch-{ID}" class="button ihd_vip_switch">Upgrade / Downgrade</a>
+     *
+     * We target by href prefix (reliable) and extract the subscription ID from the hash.
      */
-    private function render_scripts( $nonce, $ajax_url, $subscription_id ) {
+    private function render_scripts( $nonce, $ajax_url ) {
         ?>
         <script id="ihd-vip-modal-scripts">
         jQuery(function($) {
@@ -300,8 +305,16 @@ class IHD_VIP_Modal_Renderer {
             var IHD_VIP = {
                 nonce: '<?php echo esc_js( $nonce ); ?>',
                 ajaxUrl: '<?php echo esc_js( $ajax_url ); ?>',
-                subscriptionId: <?php echo $subscription_id ? $subscription_id : 0; ?>,
+                activeSubId: 0
             };
+
+            /**
+             * Extract subscription ID from href like "#ihd-vip-cancel-12345"
+             */
+            function getSubIdFromHref(href) {
+                var match = href.match(/\d+$/);
+                return match ? parseInt(match[0], 10) : 0;
+            }
 
             /* ──────────────── Modal Open / Close ──────────────── */
 
@@ -312,13 +325,11 @@ class IHD_VIP_Modal_Renderer {
                 $overlay.show();
                 $modal.show();
 
-                // Trigger reflow then add class for CSS transition.
                 requestAnimationFrame(function() {
                     $overlay.addClass('active');
                     $modal.addClass('active');
                 });
 
-                // Trap focus.
                 $modal.find('.ihd-vip-modal-close').focus();
             }
 
@@ -335,38 +346,38 @@ class IHD_VIP_Modal_Renderer {
                 }, 250);
             }
 
-            // Close on overlay click.
             $('#ihd-vip-overlay').on('click', closeAllModals);
-
-            // Close on X button or "Keep Subscription" button.
             $(document).on('click', '.ihd-vip-modal-close, .ihd-vip-modal-close-btn', closeAllModals);
-
-            // Close on Escape key.
             $(document).on('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    closeAllModals();
-                }
+                if (e.key === 'Escape') closeAllModals();
             });
 
             /* ──────────────── Cancel Flow ──────────────── */
 
-            // Intercept cancel button click.
-            $(document).on('click', '.ihd-vip-cancel-trigger', function(e) {
+            // WCS renders: <a href="#ihd-vip-cancel-{ID}" class="button cancel">Cancel</a>
+            $(document).on('click', 'a[href^="#ihd-vip-cancel-"]', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
+
+                IHD_VIP.activeSubId = getSubIdFromHref($(this).attr('href'));
 
                 // Reset form state.
                 $('input[name="ihd_cancel_reason"]').prop('checked', false);
                 $('#ihd-cancel-feedback').val('');
+
+                // Reset button/loader state.
+                $('#ihd-vip-confirm-cancel').prop('disabled', false);
+                $('#ihd-vip-cancel-modal .ihd-vip-loader').hide();
+                $('#ihd-vip-cancel-modal .ihd-vip-modal-footer').show();
 
                 openModal('#ihd-vip-cancel-modal');
             });
 
             // Confirm cancellation.
             $('#ihd-vip-confirm-cancel').on('click', function() {
-                var $btn      = $(this);
-                var reason    = $('input[name="ihd_cancel_reason"]:checked').val() || '';
-                var feedback  = $('#ihd-cancel-feedback').val();
+                var $btn     = $(this);
+                var reason   = $('input[name="ihd_cancel_reason"]:checked').val() || '';
+                var feedback = $('#ihd-cancel-feedback').val();
 
                 if (!reason) {
                     alert('Please select a reason for cancellation.');
@@ -375,12 +386,12 @@ class IHD_VIP_Modal_Renderer {
 
                 $btn.prop('disabled', true);
                 $btn.closest('.ihd-vip-modal').find('.ihd-vip-loader').show();
-                $btn.closest('.ihd-vip-modal-footer').hide();
+                $btn.closest('.ihd-vip-modal').find('.ihd-vip-modal-footer').hide();
 
                 $.post(IHD_VIP.ajaxUrl, {
                     action: 'ihd_vip_cancel_subscription',
                     nonce: IHD_VIP.nonce,
-                    subscription_id: IHD_VIP.subscriptionId,
+                    subscription_id: IHD_VIP.activeSubId,
                     reason: reason,
                     feedback: feedback
                 })
@@ -404,10 +415,12 @@ class IHD_VIP_Modal_Renderer {
 
             /* ──────────────── Switch Flow ──────────────── */
 
-            // Intercept switch button click.
-            $(document).on('click', '.ihd-vip-switch-trigger', function(e) {
+            // WCS renders: <a href="#ihd-vip-switch-{ID}" class="button ihd_vip_switch">Upgrade / Downgrade</a>
+            $(document).on('click', 'a[href^="#ihd-vip-switch-"]', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
+
+                IHD_VIP.activeSubId = getSubIdFromHref($(this).attr('href'));
 
                 // Reset state.
                 $('#ihd-vip-switch-options').html(
@@ -421,7 +434,7 @@ class IHD_VIP_Modal_Renderer {
                 $.post(IHD_VIP.ajaxUrl, {
                     action: 'ihd_vip_load_switch_options',
                     nonce: IHD_VIP.nonce,
-                    subscription_id: IHD_VIP.subscriptionId
+                    subscription_id: IHD_VIP.activeSubId
                 })
                 .done(function(resp) {
                     if (!resp.success) {
@@ -439,14 +452,12 @@ class IHD_VIP_Modal_Renderer {
                     if (resp.data.upgrades && resp.data.upgrades.length) {
                         html += '<div class="ihd-vip-tier-section">';
                         html += '<h4 class="ihd-upgrade-heading">&#9650; Upgrade</h4>';
-
                         $.each(resp.data.upgrades, function(i, plan) {
                             html += '<div class="ihd-vip-plan-card" data-variation="' + plan.variation_id + '">';
                             html += '<span class="plan-name">' + plan.name + '</span>';
                             html += '<span class="plan-price">' + plan.price_html + '</span>';
                             html += '</div>';
                         });
-
                         html += '</div>';
                     }
 
@@ -454,14 +465,12 @@ class IHD_VIP_Modal_Renderer {
                     if (resp.data.downgrades && resp.data.downgrades.length) {
                         html += '<div class="ihd-vip-tier-section">';
                         html += '<h4 class="ihd-downgrade-heading">&#9660; Downgrade</h4>';
-
                         $.each(resp.data.downgrades, function(i, plan) {
                             html += '<div class="ihd-vip-plan-card" data-variation="' + plan.variation_id + '">';
                             html += '<span class="plan-name">' + plan.name + '</span>';
                             html += '<span class="plan-price">' + plan.price_html + '</span>';
                             html += '</div>';
                         });
-
                         html += '</div>';
                     }
 
@@ -483,27 +492,23 @@ class IHD_VIP_Modal_Renderer {
                 var variationId = $(this).data('variation');
                 var $card       = $(this);
 
-                // Visual feedback — highlight selected card.
+                // Highlight selected card.
                 $('.ihd-vip-plan-card').css('border-color', '#ddd').css('background', '');
                 $card.css('border-color', '#0073aa').css('background', '#f0f6fc');
 
-                // Show loader, hide previous checkout.
                 $('#ihd-vip-switch-loader').show();
                 $('#ihd-vip-checkout-container').hide().html('');
 
                 $.post(IHD_VIP.ajaxUrl, {
                     action: 'ihd_vip_prepare_switch',
                     nonce: IHD_VIP.nonce,
-                    subscription_id: IHD_VIP.subscriptionId,
+                    subscription_id: IHD_VIP.activeSubId,
                     variation_id: variationId
                 })
                 .done(function(resp) {
                     $('#ihd-vip-switch-loader').hide();
-
                     if (resp.success && resp.data.checkout_html) {
                         $('#ihd-vip-checkout-container').html(resp.data.checkout_html).show();
-
-                        // Re-init any WooCommerce checkout JS.
                         $(document.body).trigger('init_checkout');
                     } else {
                         alert(resp.data && resp.data.message ? resp.data.message : 'Could not prepare checkout.');

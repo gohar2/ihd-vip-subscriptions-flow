@@ -47,8 +47,16 @@ function ihd_vip_init() {
         new IHD_VIP_Admin();
     }
 
+    // ─── AJAX handlers register always (they have their own nonce + ownership checks) ───
+    // wp_ajax_* hooks only fire inside admin-ajax.php, which WordPress treats as is_admin().
+    // If these aren't registered, AJAX calls from the frontend fail silently.
+    require_once IHD_VIP_PATH . 'includes/class-cancel-handler.php';
+    require_once IHD_VIP_PATH . 'includes/class-switch-handler.php';
+    new IHD_VIP_Cancel_Handler();
+    new IHD_VIP_Switch_Handler();
+
     // ─── Layer 2: Adaptive User Scope Gate ───
-    // If the gate file exists, use it to restrict frontend loading.
+    // If the gate file exists, use it to restrict frontend UI loading.
     // If the file is deleted, the plugin loads for everyone (production mode).
     $gate_file = IHD_VIP_PATH . 'includes/class-user-scope-gate.php';
 
@@ -56,18 +64,14 @@ function ihd_vip_init() {
         require_once $gate_file;
 
         if ( ! IHD_VIP_User_Scope_Gate::is_user_allowed() ) {
-            return; // Current user is not in the allowed list — stop here.
+            return; // Current user is not in the allowed list — stop frontend UI.
         }
     }
 
-    // ─── Core: Load frontend/AJAX functionality ───
+    // ─── Core: Frontend UI (filter + modals) — gated by scope ───
     require_once IHD_VIP_PATH . 'includes/class-subscription-actions.php';
-    require_once IHD_VIP_PATH . 'includes/class-cancel-handler.php';
-    require_once IHD_VIP_PATH . 'includes/class-switch-handler.php';
     require_once IHD_VIP_PATH . 'includes/class-modal-renderer.php';
 
     new IHD_VIP_Subscription_Actions();
-    new IHD_VIP_Cancel_Handler();
-    new IHD_VIP_Switch_Handler();
     new IHD_VIP_Modal_Renderer();
 }
