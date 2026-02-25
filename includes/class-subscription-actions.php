@@ -81,11 +81,16 @@ class IHD_VIP_Subscription_Actions {
         }
 
         // ─── C) Inject our Switch button for switchable items ───
+        // Check if any line item belongs to a variable-subscription product (has other variations to switch to).
+        // We avoid WC_Subscriptions_Switcher::can_item_be_switched() as its signature/behavior varies across WCS versions.
+        // The AJAX handler validates switchability server-side when loading options.
         $has_switchable = false;
 
         foreach ( $subscription->get_items() as $item_id => $item ) {
-            if ( class_exists( 'WC_Subscriptions_Switcher' )
-                 && WC_Subscriptions_Switcher::can_item_be_switched( $item, $subscription ) ) {
+            $product_id = $item->get_product_id();
+            $product    = wc_get_product( $product_id );
+
+            if ( $product && $product->is_type( 'variable-subscription' ) ) {
                 $has_switchable = true;
                 break;
             }
