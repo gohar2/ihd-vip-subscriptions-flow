@@ -19,20 +19,24 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
     $uid = 'ifx-hvp-' . $instance;
 
     $atts = shortcode_atts([
-      'current_plan' => 'Silver Membership',
-      'current_price' => '$9.99',
+      'current_plan'     => 'Silver Membership',
+      'current_price'    => '$9.99',
       'current_interval' => 'Monthly',
-      'next_bill' => 'March 15, 2026',
+      'next_bill'        => 'March 15, 2026',
+      'slider_category'  => '',
+      'slider_count'     => '4',
     ], $atts, $shortcode_tag);
 
-    $current_plan = esc_html($atts['current_plan']);
-    $current_price = esc_html($atts['current_price']);
+    $current_plan     = esc_html($atts['current_plan']);
+    $current_price    = esc_html($atts['current_price']);
     $current_interval = esc_html($atts['current_interval']);
-    $next_bill = esc_html($atts['next_bill']);
+    $next_bill        = esc_html($atts['next_bill']);
 
-    $slide_1 = 'https://v0-hero-vip-portal.vercel.app/images/testimonial-surgery.jpg';
-    $slide_2 = 'https://v0-hero-vip-portal.vercel.app/images/testimonial-flight.jpg';
-    $slide_3 = 'https://v0-hero-vip-portal.vercel.app/images/testimonial-rescue.jpg';
+    /* ── Fetch slider posts ── */
+    $slider_posts = self::get_slider_posts(
+      sanitize_text_field($atts['slider_category']),
+      absint($atts['slider_count']) ?: 4
+    );
 
     ob_start();
     ?>
@@ -669,9 +673,17 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           justify-content: flex-end;
           padding: 24px;
           color: #fff;
+          z-index: 2;
+          pointer-events: none;
         }
         @media (min-width: 700px) {
           #<?php echo esc_attr($uid); ?> .overlay { padding: 32px; }
+        }
+        #<?php echo esc_attr($uid); ?> .slide-link {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          text-decoration: none;
         }
         #<?php echo esc_attr($uid); ?> .overlay .qmark {
           width: 32px; height: 32px;
@@ -715,6 +727,7 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           display: flex; align-items: center; justify-content: center;
           cursor: pointer;
           transition: background .15s;
+          z-index: 3;
         }
         #<?php echo esc_attr($uid); ?> .navbtn:hover { background: rgba(0,0,0,.6); }
         #<?php echo esc_attr($uid); ?> .navbtn.prev { left: 8px; }
@@ -1053,71 +1066,52 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           </div>
         </section>
 
-        <!-- See the Lives -->
+        <!-- Blog Post Slider -->
+        <?php if ( ! empty( $slider_posts ) ) : $placeholder = self::get_placeholder_image(); ?>
         <div class="h3">See the Lives You Help Save</div>
         <div class="h3sub">Real stories from our rescue partners across the country.</div>
 
         <div class="carousel" data-carousel>
           <div class="slides-track" data-slides-track>
-            <div class="slide" data-slide="0">
-              <img src="<?php echo esc_url($slide_1); ?>" alt="A rescue dog receiving life-saving surgery">
+            <?php foreach ( $slider_posts as $i => $slide_post ) :
+              $img = ! empty( $slide_post['image'] ) ? esc_url( $slide_post['image'] ) : $placeholder;
+            ?>
+            <div class="slide" data-slide="<?php echo (int) $i; ?>">
+              <a href="<?php echo esc_url( $slide_post['permalink'] ); ?>" class="slide-link" aria-label="<?php echo esc_attr( $slide_post['title'] ); ?>"></a>
+              <img src="<?php echo $img; ?>" alt="<?php echo esc_attr( $slide_post['title'] ); ?>">
               <div class="overlay">
                 <svg class="qmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>
                   <path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>
                 </svg>
-                <p class="quote">"Donated meals let us redirect funds to life-saving surgeries. Last year, 200+ emergency operations happened because of Hero VIP members."</p>
+                <p class="quote"><?php echo esc_html( $slide_post['excerpt'] ); ?></p>
                 <div class="who-sep">
-                  <p class="who2">Dr. Sarah Mitchell</p>
-                  <div class="org2">Second Chance Veterinary Rescue, Austin, TX</div>
+                  <p class="who2"><?php echo esc_html( $slide_post['title'] ); ?></p>
+                  <div class="org2">By <?php echo esc_html( $slide_post['author'] ); ?> · <?php echo esc_html( $slide_post['date'] ); ?></div>
                 </div>
               </div>
             </div>
-
-            <div class="slide" data-slide="1">
-              <img src="<?php echo esc_url($slide_2); ?>" alt="Rescue dogs on a flight mission">
-              <div class="overlay">
-                <svg class="qmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>
-                  <path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>
-                </svg>
-                <p class="quote">"We fly at-risk shelter dogs to areas with adoption demand. Hero VIP Club funds the flights that give these dogs a second chance at life."</p>
-                <div class="who-sep">
-                  <p class="who2">Captain Mike Reynolds</p>
-                  <div class="org2">Wings of Rescue Foundation, Nashville, TN</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="slide" data-slide="2">
-              <img src="<?php echo esc_url($slide_3); ?>" alt="A shelter worker with rescue dogs">
-              <div class="overlay">
-                <svg class="qmark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>
-                  <path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>
-                </svg>
-                <p class="quote">"Food is our biggest cost with 80+ dogs in care. iHeartDogs donations keep our doors open &mdash; without them, we'd have to turn dogs away."</p>
-                <div class="who-sep">
-                  <p class="who2">Jennifer Ortiz</p>
-                  <div class="org2">Paws &amp; Hope Animal Shelter, Portland, OR</div>
-                </div>
-              </div>
-            </div>
+            <?php endforeach; ?>
           </div>
 
+          <?php if ( count( $slider_posts ) > 1 ) : ?>
           <button class="navbtn prev" type="button" aria-label="Previous" data-prev>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <button class="navbtn next" type="button" aria-label="Next" data-next>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
+          <?php endif; ?>
         </div>
 
+        <?php if ( count( $slider_posts ) > 1 ) : ?>
         <div class="dots" data-dots>
-          <button class="dot" type="button" data-dot="0" data-active="1" aria-label="Slide 1"></button>
-          <button class="dot" type="button" data-dot="1" data-active="0" aria-label="Slide 2"></button>
-          <button class="dot" type="button" data-dot="2" data-active="0" aria-label="Slide 3"></button>
+          <?php foreach ( $slider_posts as $i => $slide_post ) : ?>
+          <button class="dot" type="button" data-dot="<?php echo (int) $i; ?>" data-active="<?php echo $i === 0 ? '1' : '0'; ?>" aria-label="Slide <?php echo (int) $i + 1; ?>"></button>
+          <?php endforeach; ?>
         </div>
+        <?php endif; ?>
+        <?php endif; ?>
 
         <div class="impact">
           <div class="impact-title">Your Impact as a Hero VIP Member</div>
@@ -1319,5 +1313,82 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
     </div>
     <?php
     return ob_get_clean();
+  }
+
+  /**
+   * Fetch slider posts from a specific category or random.
+   *
+   * @param string $category  Category slug or ID. Empty = random posts.
+   * @param int    $count     Number of posts to fetch.
+   * @return array Array of post data arrays with keys: title, excerpt, image, author, permalink.
+   */
+  private static function get_slider_posts( $category = '', $count = 4 ) {
+    $args = [
+      'post_type'      => 'post',
+      'post_status'    => 'publish',
+      'posts_per_page' => $count,
+      'no_found_rows'  => true,
+    ];
+
+    if ( ! empty( $category ) ) {
+      // Support both slug and numeric ID.
+      if ( is_numeric( $category ) ) {
+        $args['cat'] = absint( $category );
+      } else {
+        $args['category_name'] = $category;
+      }
+    } else {
+      $args['orderby'] = 'rand';
+    }
+
+    $query = new \WP_Query( $args );
+    $posts = [];
+
+    if ( $query->have_posts() ) {
+      while ( $query->have_posts() ) {
+        $query->the_post();
+        $post_id   = get_the_ID();
+        $thumb_url = '';
+
+        if ( has_post_thumbnail( $post_id ) ) {
+          $thumb_url = get_the_post_thumbnail_url( $post_id, 'large' );
+        }
+
+        $excerpt = get_the_excerpt();
+        if ( empty( $excerpt ) ) {
+          $excerpt = wp_trim_words( get_the_content(), 30, '...' );
+        }
+
+        $posts[] = [
+          'title'     => get_the_title(),
+          'excerpt'   => $excerpt,
+          'image'     => $thumb_url,
+          'author'    => get_the_author(),
+          'date'      => get_the_date(),
+          'permalink' => get_permalink(),
+        ];
+      }
+      wp_reset_postdata();
+    }
+
+    return $posts;
+  }
+
+  /**
+   * Generate a placeholder SVG data URI for posts without images.
+   *
+   * @return string Data URI SVG placeholder.
+   */
+  private static function get_placeholder_image() {
+    return 'data:image/svg+xml,' . rawurlencode(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">'
+      . '<rect width="800" height="450" fill="#e8e0db"/>'
+      . '<g transform="translate(400,225)" fill="none" stroke="#c4b5ab" stroke-width="2">'
+      . '<rect x="-40" y="-30" width="80" height="60" rx="4"/>'
+      . '<circle cx="-18" cy="-10" r="8"/>'
+      . '<path d="M-36 26 l24-20 16 14 12-8 20 14" stroke-linejoin="round"/>'
+      . '</g>'
+      . '</svg>'
+    );
   }
 }
