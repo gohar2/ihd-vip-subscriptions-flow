@@ -68,14 +68,6 @@ function ihd_vip_init_early() {
         new IHD_VIP_Admin();
     }
 
-    // ─── AJAX handlers register always (they have their own nonce + ownership checks) ───
-    // wp_ajax_* hooks only fire inside admin-ajax.php, which WordPress treats as is_admin().
-    // If these aren't registered, AJAX calls from the frontend fail silently.
-    require_once IHD_VIP_PATH . 'includes/class-cancel-handler.php';
-    require_once IHD_VIP_PATH . 'includes/class-switch-handler.php';
-    new IHD_VIP_Cancel_Handler();
-    new IHD_VIP_Switch_Handler();
-
     // ─── Phase 2: Defer scope gate + frontend UI to 'init' where user is authenticated ───
     add_action( 'init', 'ihd_vip_init_frontend' );
 }
@@ -98,13 +90,6 @@ function ihd_vip_init_frontend() {
             return; // Current user is not in the allowed list — stop frontend UI.
         }
     }
-
-    // ─── Core: Frontend UI (filter + modals) — gated by scope ───
-    require_once IHD_VIP_PATH . 'includes/class-subscription-actions.php';
-    require_once IHD_VIP_PATH . 'includes/class-modal-renderer.php';
-
-    new IHD_VIP_Subscription_Actions();
-    new IHD_VIP_Modal_Renderer();
 
     // ─── Shortcode: Manage Subscription page ───
     require_once IHD_VIP_PATH . 'shortcodes/manage-subscription-shortcode.php';
