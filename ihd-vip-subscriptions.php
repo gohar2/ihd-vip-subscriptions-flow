@@ -13,129 +13,129 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-// define( 'IHD_VIP_VERSION', '1.0.3' );
-// define( 'IHD_VIP_PATH', plugin_dir_path( __FILE__ ) );
-// define( 'IHD_VIP_URL', plugin_dir_url( __FILE__ ) );
-// define( 'IHD_VIP_BASENAME', plugin_basename( __FILE__ ) );
+define( 'IHD_VIP_VERSION', '1.0.3' );
+define( 'IHD_VIP_PATH', plugin_dir_path( __FILE__ ) );
+define( 'IHD_VIP_URL', plugin_dir_url( __FILE__ ) );
+define( 'IHD_VIP_BASENAME', plugin_basename( __FILE__ ) );
 
-// /**
-//  * Require class files.
-//  */
-// require_once IHD_VIP_PATH . 'includes/class-installer.php';
-// require_once IHD_VIP_PATH . 'includes/class-audit-logger.php';
+/**
+ * Require class files.
+ */
+require_once IHD_VIP_PATH . 'includes/class-installer.php';
+require_once IHD_VIP_PATH . 'includes/class-audit-logger.php';
 
-// /**
-//  * Activation hook — create audit table.
-//  */
-// register_activation_hook( __FILE__, array( 'IHD_VIP_Installer', 'activate' ) );
+/**
+ * Activation hook — create audit table.
+ */
+register_activation_hook( __FILE__, array( 'IHD_VIP_Installer', 'activate' ) );
 
-// /**
-//  * Register the My Account endpoint early (must run before rewrite rules are flushed).
-//  * This needs to be outside the scope gate so WordPress always knows the endpoint exists.
-//  */
-// add_action( 'init', 'ihd_vip_register_endpoint' );
+/**
+ * Register the My Account endpoint early (must run before rewrite rules are flushed).
+ * This needs to be outside the scope gate so WordPress always knows the endpoint exists.
+ */
+add_action( 'init', 'ihd_vip_register_endpoint' );
 
-// function ihd_vip_register_endpoint() {
-//     add_rewrite_endpoint( 'manage-subscription', EP_ROOT | EP_PAGES );
-// }
+function ihd_vip_register_endpoint() {
+    add_rewrite_endpoint( 'manage-subscription', EP_ROOT | EP_PAGES );
+}
 
-// /**
-//  * Flush rewrite rules on activation so the endpoint works immediately.
-//  */
-// register_activation_hook( __FILE__, 'ihd_vip_flush_rewrites' );
+/**
+ * Flush rewrite rules on activation so the endpoint works immediately.
+ */
+register_activation_hook( __FILE__, 'ihd_vip_flush_rewrites' );
 
-// function ihd_vip_flush_rewrites() {
-//     ihd_vip_register_endpoint();
-//     flush_rewrite_rules();
-// }
+function ihd_vip_flush_rewrites() {
+    ihd_vip_register_endpoint();
+    flush_rewrite_rules();
+}
 
-// /**
-//  * Phase 1: plugins_loaded — dependency check, admin, AJAX handlers.
-//  * Runs before user auth is available. No scope gate here.
-//  */
-// add_action( 'plugins_loaded', 'ihd_vip_init_early' );
+/**
+ * Phase 1: plugins_loaded — dependency check, admin, AJAX handlers.
+ * Runs before user auth is available. No scope gate here.
+ */
+add_action( 'plugins_loaded', 'ihd_vip_init_early' );
 
-// function ihd_vip_init_early() {
+function ihd_vip_init_early() {
 
-//     // Bail if WooCommerce Subscriptions is not active.
-//     if ( ! class_exists( 'WC_Subscriptions' ) ) {
-//         return;
-//     }
+    // Bail if WooCommerce Subscriptions is not active.
+    if ( ! class_exists( 'WC_Subscriptions' ) ) {
+        return;
+    }
 
-//     // ─── Layer 1: Admin always loads (regardless of scope gate) ───
-//     if ( is_admin() ) {
-//         require_once IHD_VIP_PATH . 'includes/class-admin.php';
-//         new IHD_VIP_Admin();
-//     }
+    // ─── Layer 1: Admin always loads (regardless of scope gate) ───
+    if ( is_admin() ) {
+        require_once IHD_VIP_PATH . 'includes/class-admin.php';
+        new IHD_VIP_Admin();
+    }
 
-//     // ─── Phase 2: Defer scope gate + frontend UI to 'init' where user is authenticated ───
-//     add_action( 'init', 'ihd_vip_init_frontend' );
-// }
+    // ─── Phase 2: Defer scope gate + frontend UI to 'init' where user is authenticated ───
+    add_action( 'init', 'ihd_vip_init_frontend' );
+}
 
-// /**
-//  * Phase 2: init — scope gate + frontend UI.
-//  * Runs AFTER WordPress has processed auth cookies, so get_current_user_id() works.
-//  */
-// function ihd_vip_init_frontend() {
+/**
+ * Phase 2: init — scope gate + frontend UI.
+ * Runs AFTER WordPress has processed auth cookies, so get_current_user_id() works.
+ */
+function ihd_vip_init_frontend() {
 
-//     // ─── Layer 2: Adaptive User Scope Gate ───
-//     // If the gate file exists, use it to restrict frontend UI loading.
-//     // If the file is deleted, the plugin loads for everyone (production mode).
-//     $gate_file = IHD_VIP_PATH . 'includes/class-user-scope-gate.php';
+    // ─── Layer 2: Adaptive User Scope Gate ───
+    // If the gate file exists, use it to restrict frontend UI loading.
+    // If the file is deleted, the plugin loads for everyone (production mode).
+    $gate_file = IHD_VIP_PATH . 'includes/class-user-scope-gate.php';
 
-//     if ( file_exists( $gate_file ) ) {
-//         require_once $gate_file;
+    if ( file_exists( $gate_file ) ) {
+        require_once $gate_file;
 
-//         if ( ! IHD_VIP_User_Scope_Gate::is_user_allowed() ) {
-//             return; // Current user is not in the allowed list — stop frontend UI.
-//         }
-//     }
+        if ( ! IHD_VIP_User_Scope_Gate::is_user_allowed() ) {
+            return; // Current user is not in the allowed list — stop frontend UI.
+        }
+    }
 
-//     // ─── Shortcode: Manage Subscription page ───
-//     require_once IHD_VIP_PATH . 'shortcodes/manage-subscription-shortcode.php';
-//     Hero_VIP_Manage_Subscription_Refined_Shortcode::init();
+    // ─── Shortcode: Manage Subscription page ───
+    require_once IHD_VIP_PATH . 'shortcodes/manage-subscription-shortcode.php';
+    Hero_VIP_Manage_Subscription_Refined_Shortcode::init();
 
-//     // Add "Manage My Subscription" tab to My Account menu.
-//     add_filter( 'woocommerce_account_menu_items', 'ihd_vip_add_manage_tab' );
+    // Add "Manage My Subscription" tab to My Account menu.
+    add_filter( 'woocommerce_account_menu_items', 'ihd_vip_add_manage_tab' );
 
-//     // Render shortcode content on the endpoint page.
-//     add_action( 'woocommerce_account_manage-subscription_endpoint', 'ihd_vip_render_manage_page' );
-// }
+    // Render shortcode content on the endpoint page.
+    add_action( 'woocommerce_account_manage-subscription_endpoint', 'ihd_vip_render_manage_page' );
+}
 
-// /**
-//  * Insert "Manage My Subscription" tab into the My Account sidebar menu.
-//  */
-// function ihd_vip_add_manage_tab( $items ) {
-//     // Insert after "My Subscription" if it exists, otherwise after "orders".
-//     $new_items = array();
+/**
+ * Insert "Manage My Subscription" tab into the My Account sidebar menu.
+ */
+function ihd_vip_add_manage_tab( $items ) {
+    // Insert after "My Subscription" if it exists, otherwise after "orders".
+    $new_items = array();
 
-//     foreach ( $items as $key => $label ) {
-//         $new_items[ $key ] = $label;
+    foreach ( $items as $key => $label ) {
+        $new_items[ $key ] = $label;
 
-//         // Insert right after the subscriptions tab (or orders as fallback).
-//         if ( 'subscriptions' === $key || ( 'orders' === $key && ! isset( $items['subscriptions'] ) ) ) {
-//             $new_items['manage-subscription'] = 'Manage My Subscription';
-//         }
-//     }
+        // Insert right after the subscriptions tab (or orders as fallback).
+        if ( 'subscriptions' === $key || ( 'orders' === $key && ! isset( $items['subscriptions'] ) ) ) {
+            $new_items['manage-subscription'] = 'Manage My Subscription';
+        }
+    }
 
-//     // Fallback: if neither key was found, just append before logout.
-//     if ( ! isset( $new_items['manage-subscription'] ) ) {
-//         $logout = isset( $new_items['customer-logout'] ) ? $new_items['customer-logout'] : null;
-//         unset( $new_items['customer-logout'] );
-//         $new_items['manage-subscription'] = 'Manage My Subscription';
-//         if ( $logout ) {
-//             $new_items['customer-logout'] = $logout;
-//         }
-//     }
+    // Fallback: if neither key was found, just append before logout.
+    if ( ! isset( $new_items['manage-subscription'] ) ) {
+        $logout = isset( $new_items['customer-logout'] ) ? $new_items['customer-logout'] : null;
+        unset( $new_items['customer-logout'] );
+        $new_items['manage-subscription'] = 'Manage My Subscription';
+        if ( $logout ) {
+            $new_items['customer-logout'] = $logout;
+        }
+    }
 
-//     return $new_items;
-// }
+    return $new_items;
+}
 
-// /**
-//  * Render the Manage Subscription shortcode on the endpoint page.
-//  */
-// function ihd_vip_render_manage_page() {
-//     echo '<main>';
-//     echo do_shortcode( '[hero_vip_manage_subscription_refined]' );
-//     echo '</main>';
-// }
+/**
+ * Render the Manage Subscription shortcode on the endpoint page.
+ */
+function ihd_vip_render_manage_page() {
+    echo '<main>';
+    echo do_shortcode( '[hero_vip_manage_subscription_refined]' );
+    echo '</main>';
+}
