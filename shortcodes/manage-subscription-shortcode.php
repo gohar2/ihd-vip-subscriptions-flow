@@ -136,61 +136,88 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
 
         /* === Section / Accordion === */
         #<?php echo esc_attr($uid); ?> .section {
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: var(--radius);
-          margin: 0 0 16px;
-          overflow: hidden;
+          background: var(--card) !important;
+          border: 1px solid var(--border) !important;
+          border-radius: var(--radius) !important;
+          margin: 0 0 16px !important;
+          overflow: hidden !important;
         }
         #<?php echo esc_attr($uid); ?> .acc-h {
-          width: 100%;
-          border: 0;
-          background: #fff;
-          padding: 20px 22px;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 14px;
-          cursor: pointer;
-          font-family: inherit;
+          width: 100% !important;
+          border: 0 !important;
+          background: #fff !important;
+          padding: 20px 22px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          gap: 14px !important;
+          cursor: pointer !important;
+          font-family: inherit !important;
+          transition: background .15s ease !important;
         }
-        #<?php echo esc_attr($uid); ?> .acc-h:focus { outline: none; box-shadow: 0 0 0 3px rgba(178,58,58,.15) inset; }
+        #<?php echo esc_attr($uid); ?> .acc-h:hover { background: #faf7f5 !important; }
+        #<?php echo esc_attr($uid); ?> .acc-h:focus { outline: none !important; box-shadow: 0 0 0 3px rgba(178,58,58,.15) inset !important; }
         #<?php echo esc_attr($uid); ?> .acc-left {
-          display: flex;
-          align-items: flex-start;
-          gap: 14px;
+          display: flex !important;
+          align-items: center !important;
+          gap: 14px !important;
         }
         #<?php echo esc_attr($uid); ?> .acc-ico {
-          width: 36px; height: 36px;
-          border-radius: 50%;
-          background: #f3ecea;
-          display: flex; align-items: center; justify-content: center;
-          flex: 0 0 auto;
+          width: 40px !important; height: 40px !important;
+          min-width: 40px !important; min-height: 40px !important;
+          border-radius: 50% !important;
+          background: #f3ecea !important;
+          display: flex !important; align-items: center !important; justify-content: center !important;
+          flex: 0 0 auto !important;
         }
-        #<?php echo esc_attr($uid); ?> .acc-title {
-          font-weight: 800;
-          font-size: 17px;
-          line-height: 1.25;
+        #<?php echo esc_attr($uid); ?> .acc-title,
+        #<?php echo esc_attr($uid); ?> .section .acc-title,
+        #<?php echo esc_attr($uid); ?> .section .acc-h .acc-title,
+        #<?php echo esc_attr($uid); ?> h2.acc-title {
+          font-weight: 700 !important;
+          font-size: 18px !important;
+          line-height: 1.3 !important;
+          color: var(--text) !important;
+          display: block !important;
+          visibility: visible !important;
+          opacity: 1 !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          text-transform: none !important;
+          letter-spacing: normal !important;
         }
         #<?php echo esc_attr($uid); ?> .acc-sub {
-          font-size: 14px;
-          color: var(--muted);
-          margin-top: 3px;
+          font-size: 14px !important;
+          color: var(--muted) !important;
+          margin-top: 3px !important;
+          display: block !important;
+          visibility: visible !important;
         }
         #<?php echo esc_attr($uid); ?> .chev {
-          width: 22px; height: 22px;
-          color: #888;
-          transition: transform .2s ease;
-          flex: 0 0 auto;
+          width: 22px !important; height: 22px !important;
+          color: #888 !important;
+          transition: transform .3s ease !important;
+          flex: 0 0 auto !important;
         }
-        #<?php echo esc_attr($uid); ?> .section[data-open="1"] .chev { transform: rotate(180deg); }
+        #<?php echo esc_attr($uid); ?> .section[data-open="1"] .chev { transform: rotate(180deg) !important; }
+
+        /* Animated accordion panel */
         #<?php echo esc_attr($uid); ?> .acc-panel {
-          padding: 20px 22px 24px;
-          border-top: 1px solid #f0e7e2;
-          display: none;
-          background: #fff;
+          padding: 0 22px !important;
+          border-top: 1px solid #f0e7e2 !important;
+          background: #fff !important;
+          max-height: 0 !important;
+          overflow: hidden !important;
+          opacity: 0 !important;
+          transition: max-height .4s cubic-bezier(0.4, 0, 0.2, 1),
+                      opacity .3s ease,
+                      padding .4s cubic-bezier(0.4, 0, 0.2, 1) !important;
         }
-        #<?php echo esc_attr($uid); ?> .section[data-open="1"] .acc-panel { display: block; }
+        #<?php echo esc_attr($uid); ?> .section[data-open="1"] .acc-panel {
+          max-height: 2000px !important;
+          opacity: 1 !important;
+          padding: 20px 22px 24px !important;
+        }
 
         /* === Plans Grid === */
         #<?php echo esc_attr($uid); ?> .plans {
@@ -460,15 +487,19 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           position: relative;
           border: 1px solid #e7dfdb;
         }
+        #<?php echo esc_attr($uid); ?> .slides-track {
+          display: flex;
+          transition: transform .5s ease-in-out;
+        }
         #<?php echo esc_attr($uid); ?> .slide {
-          display: none;
+          width: 100%;
+          flex-shrink: 0;
           position: relative;
           height: 320px;
         }
         @media (min-width: 700px) {
           #<?php echo esc_attr($uid); ?> .slide { height: 380px; }
         }
-        #<?php echo esc_attr($uid); ?> .slide[data-active="1"] { display: block; }
         #<?php echo esc_attr($uid); ?> .slide img {
           width: 100%; height: 100%;
           object-fit: cover;
@@ -526,14 +557,18 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           padding: 14px 0 0;
         }
         #<?php echo esc_attr($uid); ?> .dot {
-          width: 24px; height: 7px;
+          width: 10px; height: 10px;
           border-radius: 999px;
-          background: #e8dedd;
+          background: rgba(0,0,0,.15);
           border: 0;
           cursor: pointer;
-          transition: background .15s;
+          transition: all .3s ease;
         }
-        #<?php echo esc_attr($uid); ?> .dot[data-active="1"] { background: var(--brand-red); }
+        #<?php echo esc_attr($uid); ?> .dot:hover { background: rgba(0,0,0,.35); }
+        #<?php echo esc_attr($uid); ?> .dot[data-active="1"] {
+          background: var(--brand-red);
+          width: 28px;
+        }
 
         /* === Impact Bar === */
         #<?php echo esc_attr($uid); ?> .impact {
@@ -574,16 +609,24 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
         #<?php echo esc_attr($uid); ?> .modal {
           position: fixed;
           inset: 0;
-          display: none;
+          display: flex;
           align-items: center;
           justify-content: center;
           padding: 20px;
           z-index: 999999;
+          opacity: 0;
+          visibility: hidden;
+          transition: opacity .25s ease, visibility .25s ease;
         }
-        #<?php echo esc_attr($uid); ?> .modal[data-open="1"] { display: flex; }
+        #<?php echo esc_attr($uid); ?> .modal[data-open="1"] {
+          opacity: 1;
+          visibility: visible;
+        }
         #<?php echo esc_attr($uid); ?> .backdrop {
           position: absolute; inset: 0;
           background: rgba(0,0,0,.45);
+          backdrop-filter: blur(2px);
+          -webkit-backdrop-filter: blur(2px);
         }
         #<?php echo esc_attr($uid); ?> .mcard {
           position: relative;
@@ -593,6 +636,11 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           border: 1px solid #ebe0db;
           box-shadow: 0 20px 60px rgba(0,0,0,.22);
           overflow: hidden;
+          transform: scale(.95) translateY(10px);
+          transition: transform .3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #<?php echo esc_attr($uid); ?> .modal[data-open="1"] .mcard {
+          transform: scale(1) translateY(0);
         }
         #<?php echo esc_attr($uid); ?> .mhead {
           padding: 18px 20px;
@@ -681,7 +729,7 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
                 </svg>
               </div>
               <div>
-                <div class="acc-title">Upgrade or Downgrade Your Membership</div>
+                <h2 class="acc-title">Upgrade or Downgrade Your Membership</h2>
                 <div class="acc-sub">Choose the plan that works best for you</div>
               </div>
             </div>
@@ -763,7 +811,7 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
                 </svg>
               </div>
               <div>
-                <div class="acc-title">Pause My Membership</div>
+                <h2 class="acc-title">Pause My Membership</h2>
                 <div class="acc-sub">Take a break</div>
               </div>
             </div>
@@ -801,7 +849,7 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
                 </svg>
               </div>
               <div>
-                <div class="acc-title">Cancel My Membership</div>
+                <h2 class="acc-title">Cancel My Membership</h2>
                 <div class="acc-sub">We'd hate to see you go</div>
               </div>
             </div>
@@ -849,33 +897,35 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
         <div class="h3sub">Real stories from our rescue partners across the country.</div>
 
         <div class="carousel" data-carousel>
-          <div class="slide" data-slide="0" data-active="0">
-            <img src="<?php echo esc_url($slide_1); ?>" alt="">
-            <div class="overlay">
-              <div class="qmark" aria-hidden="true">&ldquo;</div>
-              <p class="quote">"Donated meals let us redirect funds to life-saving surgeries. Last year, 200+ emergency operations happened because of Hero VIP members."</p>
-              <p class="who2">Dr. Sarah Mitchell</p>
-              <div class="org2">Second Chance Veterinary Rescue, Austin, TX</div>
+          <div class="slides-track" data-slides-track>
+            <div class="slide" data-slide="0">
+              <img src="<?php echo esc_url($slide_1); ?>" alt="">
+              <div class="overlay">
+                <div class="qmark" aria-hidden="true">&ldquo;</div>
+                <p class="quote">"Donated meals let us redirect funds to life-saving surgeries. Last year, 200+ emergency operations happened because of Hero VIP members."</p>
+                <p class="who2">Dr. Sarah Mitchell</p>
+                <div class="org2">Second Chance Veterinary Rescue, Austin, TX</div>
+              </div>
             </div>
-          </div>
 
-          <div class="slide" data-slide="1" data-active="0">
-            <img src="<?php echo esc_url($slide_2); ?>" alt="">
-            <div class="overlay">
-              <div class="qmark" aria-hidden="true">&ldquo;</div>
-              <p class="quote">"We fly at-risk shelter dogs to areas with adoption demand. Hero VIP Club funds the flights that give these dogs a second chance at life."</p>
-              <p class="who2">Captain Mike Reynolds</p>
-              <div class="org2">Wings of Rescue Foundation, Nashville, TN</div>
+            <div class="slide" data-slide="1">
+              <img src="<?php echo esc_url($slide_2); ?>" alt="">
+              <div class="overlay">
+                <div class="qmark" aria-hidden="true">&ldquo;</div>
+                <p class="quote">"We fly at-risk shelter dogs to areas with adoption demand. Hero VIP Club funds the flights that give these dogs a second chance at life."</p>
+                <p class="who2">Captain Mike Reynolds</p>
+                <div class="org2">Wings of Rescue Foundation, Nashville, TN</div>
+              </div>
             </div>
-          </div>
 
-          <div class="slide" data-slide="2" data-active="1">
-            <img src="<?php echo esc_url($slide_3); ?>" alt="">
-            <div class="overlay">
-              <div class="qmark" aria-hidden="true">&ldquo;</div>
-              <p class="quote">"Food is our biggest cost with 80+ dogs in care. iHeartDogs donations keep our doors open &mdash; without them, we'd have to turn dogs away."</p>
-              <p class="who2">Jennifer Ortiz</p>
-              <div class="org2">Paws &amp; Hope Animal Shelter, Portland, OR</div>
+            <div class="slide" data-slide="2">
+              <img src="<?php echo esc_url($slide_3); ?>" alt="">
+              <div class="overlay">
+                <div class="qmark" aria-hidden="true">&ldquo;</div>
+                <p class="quote">"Food is our biggest cost with 80+ dogs in care. iHeartDogs donations keep our doors open &mdash; without them, we'd have to turn dogs away."</p>
+                <p class="who2">Jennifer Ortiz</p>
+                <div class="org2">Paws &amp; Hope Animal Shelter, Portland, OR</div>
+              </div>
             </div>
           </div>
 
@@ -888,9 +938,9 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
         </div>
 
         <div class="dots" data-dots>
-          <button class="dot" type="button" data-dot="0" data-active="0" aria-label="Slide 1"></button>
+          <button class="dot" type="button" data-dot="0" data-active="1" aria-label="Slide 1"></button>
           <button class="dot" type="button" data-dot="1" data-active="0" aria-label="Slide 2"></button>
-          <button class="dot" type="button" data-dot="2" data-active="1" aria-label="Slide 3"></button>
+          <button class="dot" type="button" data-dot="2" data-active="0" aria-label="Slide 3"></button>
         </div>
 
         <div class="impact">
@@ -1042,19 +1092,19 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           const root = document.getElementById(<?php echo json_encode($uid); ?>);
           if (!root) return;
 
-          /* Accordions — all COLLAPSED by default */
+          /* ── Accordions — animated open/close ── */
           root.querySelectorAll('[data-acc]').forEach(sec => {
             const btn = sec.querySelector('[data-acc-toggle]');
             if (!btn) return;
             btn.setAttribute('aria-expanded', sec.getAttribute('data-open') === '1' ? 'true' : 'false');
             btn.addEventListener('click', () => {
-              const open = sec.getAttribute('data-open') === '1';
-              sec.setAttribute('data-open', open ? '0' : '1');
-              btn.setAttribute('aria-expanded', open ? 'false' : 'true');
+              const isOpen = sec.getAttribute('data-open') === '1';
+              sec.setAttribute('data-open', isOpen ? '0' : '1');
+              btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
             });
           });
 
-          /* Pause pills */
+          /* ── Pause pills ── */
           let pauseDays = 30;
           const pauseGrid = root.querySelector('[data-pause-grid]');
           if (pauseGrid) {
@@ -1069,54 +1119,75 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
             });
           }
 
-          /* Carousel */
+          /* ── Carousel with translateX sliding + auto-play ── */
           const carousel = root.querySelector('[data-carousel]');
-          const slides = carousel ? Array.from(carousel.querySelectorAll('[data-slide]')) : [];
+          const track = root.querySelector('[data-slides-track]');
+          const slides = track ? Array.from(track.querySelectorAll('[data-slide]')) : [];
           const dotsWrap = root.querySelector('[data-dots]');
           const dots = dotsWrap ? Array.from(dotsWrap.querySelectorAll('[data-dot]')) : [];
-          let idx = slides.findIndex(s => s.getAttribute('data-active') === '1');
-          if (idx < 0) idx = 0;
+          let idx = 0;
+          let autoTimer = null;
+          const AUTO_INTERVAL = 5000;
 
-          function setActive(i){
-            idx = (i + slides.length) % slides.length;
-            slides.forEach((s, n) => s.setAttribute('data-active', n === idx ? '1' : '0'));
+          function goToSlide(i) {
+            idx = ((i % slides.length) + slides.length) % slides.length;
+            if (track) track.style.transform = 'translateX(-' + (idx * 100) + '%)';
             dots.forEach((d, n) => d.setAttribute('data-active', n === idx ? '1' : '0'));
           }
-          if (carousel) {
+
+          function startAuto() {
+            stopAuto();
+            autoTimer = setInterval(() => goToSlide(idx + 1), AUTO_INTERVAL);
+          }
+
+          function stopAuto() {
+            if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+          }
+
+          if (carousel && slides.length > 1) {
             const prev = carousel.querySelector('[data-prev]');
             const next = carousel.querySelector('[data-next]');
-            if (prev) prev.addEventListener('click', () => setActive(idx - 1));
-            if (next) next.addEventListener('click', () => setActive(idx + 1));
+            if (prev) prev.addEventListener('click', () => { goToSlide(idx - 1); startAuto(); });
+            if (next) next.addEventListener('click', () => { goToSlide(idx + 1); startAuto(); });
+
+            /* Pause auto-slide on hover */
+            carousel.addEventListener('mouseenter', stopAuto);
+            carousel.addEventListener('mouseleave', startAuto);
+
+            goToSlide(0);
+            startAuto();
           }
+
           if (dotsWrap) {
             dotsWrap.addEventListener('click', (e) => {
               const d = e.target.closest('[data-dot]');
               if (!d) return;
-              setActive(parseInt(d.getAttribute('data-dot') || '0', 10));
+              goToSlide(parseInt(d.getAttribute('data-dot') || '0', 10));
+              startAuto();
             });
           }
 
-          /* Modals */
+          /* ── Modals with animation ── */
           const modals = Array.from(root.querySelectorAll('.modal[data-modal]'));
           let lastFocus = null;
 
-          function openModal(key){
-            const m = root.querySelector('.modal[data-modal="'+key+'"]');
+          function openModal(key) {
+            const m = root.querySelector('.modal[data-modal="' + key + '"]');
             if (!m) return;
             lastFocus = document.activeElement;
-            m.setAttribute('data-open','1');
+            m.setAttribute('data-open', '1');
             document.documentElement.style.overflow = 'hidden';
             document.body.style.overflow = 'hidden';
             const focusable = m.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
             if (focusable.length) focusable[0].focus();
           }
 
-          function closeModal(m){
+          function closeModal(m) {
             if (!m) return;
-            m.setAttribute('data-open','0');
+            m.setAttribute('data-open', '0');
             document.documentElement.style.overflow = '';
             document.body.style.overflow = '';
-            if (lastFocus && typeof lastFocus.focus === 'function') { try { lastFocus.focus(); } catch(e){} }
+            if (lastFocus && typeof lastFocus.focus === 'function') { try { lastFocus.focus(); } catch (e) {} }
             lastFocus = null;
           }
 
