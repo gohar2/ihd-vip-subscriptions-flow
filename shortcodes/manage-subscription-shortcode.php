@@ -1356,11 +1356,15 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
 
         $excerpt = get_the_excerpt();
         if ( empty( $excerpt ) ) {
-          $excerpt = wp_trim_words( get_the_content(), 30, '...' );
+          $excerpt = wp_trim_words( get_the_content(), 18, '…' );
+        } else {
+          $excerpt = wp_trim_words( $excerpt, 18, '…' );
         }
+        // Strip any remaining HTML and decode entities.
+        $excerpt = html_entity_decode( wp_strip_all_tags( $excerpt ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
 
         $posts[] = [
-          'title'     => get_the_title(),
+          'title'     => html_entity_decode( get_the_title(), ENT_QUOTES | ENT_HTML5, 'UTF-8' ),
           'excerpt'   => $excerpt,
           'image'     => $thumb_url,
           'author'    => get_the_author(),
@@ -1375,20 +1379,11 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
   }
 
   /**
-   * Generate a placeholder SVG data URI for posts without images.
+   * Return a placehold.co URL for posts without featured images.
    *
-   * @return string Data URI SVG placeholder.
+   * @return string Placeholder image URL.
    */
   private static function get_placeholder_image() {
-    return 'data:image/svg+xml,' . rawurlencode(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">'
-      . '<rect width="800" height="450" fill="#e8e0db"/>'
-      . '<g transform="translate(400,225)" fill="none" stroke="#c4b5ab" stroke-width="2">'
-      . '<rect x="-40" y="-30" width="80" height="60" rx="4"/>'
-      . '<circle cx="-18" cy="-10" r="8"/>'
-      . '<path d="M-36 26 l24-20 16 14 12-8 20 14" stroke-linejoin="round"/>'
-      . '</g>'
-      . '</svg>'
-    );
+    return 'https://placehold.co/800x450/e8e0db/c4b5ab?text=No+Image';
   }
 }
