@@ -714,43 +714,58 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           margin-top: 2px;
         }
         #<?php echo esc_attr($uid); ?> .navbtn {
-          position: absolute;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 40px; height: 40px;
-          border-radius: 50%;
-          border: 0;
-          background: rgba(0,0,0,.4);
-          backdrop-filter: blur(4px);
-          -webkit-backdrop-filter: blur(4px);
-          color: #fff;
-          display: flex; align-items: center; justify-content: center;
-          cursor: pointer;
-          transition: background .15s;
-          z-index: 3;
+          position: absolute !important;
+          top: 50% !important;
+          transform: translateY(-50%) !important;
+          width: 40px !important; height: 40px !important;
+          min-width: 40px !important; max-width: 40px !important;
+          min-height: 40px !important; max-height: 40px !important;
+          border-radius: 50% !important;
+          border: 0 !important;
+          background: rgba(0,0,0,.4) !important;
+          backdrop-filter: blur(4px) !important;
+          -webkit-backdrop-filter: blur(4px) !important;
+          color: #fff !important;
+          display: flex !important; align-items: center !important; justify-content: center !important;
+          cursor: pointer !important;
+          transition: background .15s !important;
+          z-index: 3 !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          box-shadow: none !important;
+          outline: none !important;
         }
-        #<?php echo esc_attr($uid); ?> .navbtn:hover { background: rgba(0,0,0,.6); }
-        #<?php echo esc_attr($uid); ?> .navbtn.prev { left: 8px; }
-        #<?php echo esc_attr($uid); ?> .navbtn.next { right: 8px; }
+        #<?php echo esc_attr($uid); ?> .navbtn:hover { background: rgba(0,0,0,.6) !important; }
+        #<?php echo esc_attr($uid); ?> .navbtn.prev { left: 8px !important; }
+        #<?php echo esc_attr($uid); ?> .navbtn.next { right: 8px !important; }
         #<?php echo esc_attr($uid); ?> .dots {
-          display: flex;
-          justify-content: center;
-          gap: 8px;
-          padding: 16px 0 0;
+          display: flex !important;
+          justify-content: center !important;
+          gap: 8px !important;
+          padding: 16px 0 0 !important;
+          list-style: none !important;
         }
         #<?php echo esc_attr($uid); ?> .dot {
-          height: 10px;
-          border-radius: 999px;
-          border: 0;
-          cursor: pointer;
-          transition: all .3s ease;
-          width: 10px;
-          background: rgba(0,0,0,.15);
+          height: 10px !important;
+          border-radius: 999px !important;
+          border: 0 !important;
+          cursor: pointer !important;
+          transition: all .3s ease !important;
+          width: 10px !important;
+          min-width: 10px !important;
+          max-width: 10px !important;
+          background: rgba(0,0,0,.15) !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          outline: none !important;
+          box-shadow: none !important;
         }
-        #<?php echo esc_attr($uid); ?> .dot:hover { background: rgba(0,0,0,.35); }
+        #<?php echo esc_attr($uid); ?> .dot:hover { background: rgba(0,0,0,.35) !important; }
         #<?php echo esc_attr($uid); ?> .dot[data-active="1"] {
-          background: var(--brand-red);
-          width: 28px;
+          background: var(--brand-red) !important;
+          width: 28px !important;
+          min-width: 28px !important;
+          max-width: 28px !important;
         }
 
         /* === Impact Bar === */
