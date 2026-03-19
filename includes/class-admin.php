@@ -571,7 +571,7 @@ JS;
         .ihd-card-desc { margin: 0 0 20px; color: #50575e; font-size: 13px; line-height: 1.6; }
 
         /* Select2 Overrides */
-        .ihd-select-wrap { margin-bottom: 20px; }
+        .ihd-select-wrap { margin-bottom: 20px; max-width: 420px; }
         .ihd-select-label { display: block; font-weight: 600; color: #1d2327; margin-bottom: 6px; font-size: 13px; }
         .ihd-select-hint { margin: 8px 0 0; color: #8c8f94; font-size: 12px; font-style: italic; }
 
@@ -677,11 +677,18 @@ JS;
         .ihd-page-ellipsis { color: #a7aaad; padding: 0 4px; }
 
         /* Responsive */
+        @media (min-width: 1200px) {
+            .ihd-select-wrap { max-width: 420px; }
+        }
+        @media (max-width: 1199px) and (min-width: 783px) {
+            .ihd-select-wrap { max-width: 50%; }
+        }
         @media (max-width: 782px) {
             .ihd-stats-row { grid-template-columns: 1fr; }
             .ihd-page-header { flex-direction: column; align-items: flex-start; gap: 10px; }
             .ihd-audit-filters { flex-direction: column; }
             .ihd-filter-select, .ihd-filter-input { width: 100%; min-width: auto; }
+            .ihd-select-wrap { max-width: 100%; }
         }
 CSS;
     }
