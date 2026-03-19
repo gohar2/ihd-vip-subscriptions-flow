@@ -22,6 +22,7 @@ define( 'IHD_VIP_BASENAME', plugin_basename( __FILE__ ) );
  * Require class files.
  */
 require_once IHD_VIP_PATH . 'includes/class-installer.php';
+require_once IHD_VIP_PATH . 'includes/class-audit-logger.php';
 
 /**
  * Activation hook — create audit table.
@@ -66,6 +67,15 @@ function ihd_vip_init_early() {
         require_once IHD_VIP_PATH . 'includes/class-admin.php';
         new IHD_VIP_Admin();
     }
+
+    // ─── Global: Cancel handler (AJAX) — must be available for all allowed users ───
+    require_once IHD_VIP_PATH . 'includes/class-cancel-handler.php';
+    new IHD_VIP_Cancel_Handler();
+
+    // ─── Global: Event tracker — monitors ALL subscription cancellations & payment failures ───
+    // Runs outside the scope gate so it captures events for every subscription, not just VIP users.
+    require_once IHD_VIP_PATH . 'includes/class-subscription-event-tracker.php';
+    new IHD_VIP_Subscription_Event_Tracker();
 
     // ─── Phase 2: Defer scope gate + frontend UI to 'init' where user is authenticated ───
     add_action( 'init', 'ihd_vip_init_frontend' );

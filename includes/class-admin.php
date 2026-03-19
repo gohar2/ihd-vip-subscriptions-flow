@@ -147,12 +147,24 @@ class IHD_VIP_Admin {
                     ? '<span class="ihd-badge ihd-badge-yes">User-initiated</span>'
                     : '<span class="ihd-badge ihd-badge-no">System</span>';
 
-                $reason_badge = $row['reason']
-                    ? '<span class="ihd-badge ihd-badge-reason">' . esc_html( $row['reason'] ) . '</span>'
-                    : '<span class="ihd-audit-muted">—</span>';
+                // Color-code reason badges by type.
+                $reason_text = esc_html( $row['reason'] );
+                if ( ! $row['reason'] ) {
+                    $reason_badge = '<span class="ihd-audit-muted">—</span>';
+                } elseif ( stripos( $row['reason'], 'Integration' ) !== false || stripos( $row['reason'], 'Gateway Error' ) !== false ) {
+                    $reason_badge = '<span class="ihd-badge ihd-badge-danger">' . $reason_text . '</span>';
+                } elseif ( stripos( $row['reason'], 'Payment Failed' ) !== false || stripos( $row['reason'], 'Max Retries' ) !== false ) {
+                    $reason_badge = '<span class="ihd-badge ihd-badge-warning">' . $reason_text . '</span>';
+                } elseif ( stripos( $row['reason'], 'Admin' ) !== false ) {
+                    $reason_badge = '<span class="ihd-badge ihd-badge-admin">' . $reason_text . '</span>';
+                } elseif ( stripos( $row['reason'], 'Expired' ) !== false || stripos( $row['reason'], 'On-Hold' ) !== false ) {
+                    $reason_badge = '<span class="ihd-badge ihd-badge-no">' . $reason_text . '</span>';
+                } else {
+                    $reason_badge = '<span class="ihd-badge ihd-badge-reason">' . $reason_text . '</span>';
+                }
 
                 $feedback_text = ! empty( $row['text'] )
-                    ? '<div class="ihd-audit-feedback">' . esc_html( wp_trim_words( $row['text'], 20 ) ) . '</div>'
+                    ? '<div class="ihd-audit-feedback">' . nl2br( esc_html( wp_trim_words( $row['text'], 30 ) ) ) . '</div>'
                     : '<span class="ihd-audit-muted">No feedback</span>';
 
                 $date_formatted = wp_date( 'M j, Y', strtotime( $row['created_at'] ) );
@@ -330,11 +342,29 @@ class IHD_VIP_Admin {
                             <label for="ihd-filter-reason">Reason</label>
                             <select id="ihd-filter-reason" class="ihd-filter-select">
                                 <option value="">All Reasons</option>
-                                <option value="Too expensive">Too expensive</option>
-                                <option value="Not using the benefits enough">Not using benefits</option>
-                                <option value="Found an alternative">Found alternative</option>
-                                <option value="Just need a break">Need a break</option>
-                                <option value="Other">Other</option>
+                                <optgroup label="User-Initiated">
+                                    <option value="Too expensive">Too expensive</option>
+                                    <option value="Not using the benefits enough">Not using benefits</option>
+                                    <option value="Found an alternative">Found alternative</option>
+                                    <option value="Just need a break">Need a break</option>
+                                    <option value="Other">Other</option>
+                                </optgroup>
+                                <optgroup label="System-Detected">
+                                    <option value="Renewal Payment Failed">Renewal Payment Failed</option>
+                                    <option value="Integration/Gateway Error">Integration/Gateway Error</option>
+                                    <option value="Auto-cancelled (Payment Failed)">Auto-cancelled (Payment Failed)</option>
+                                    <option value="Auto-cancelled (Max Retries Exceeded)">Auto-cancelled (Max Retries)</option>
+                                    <option value="On-Hold (Payment Failed)">On-Hold (Payment Failed)</option>
+                                    <option value="On-Hold (Integration/Gateway Error)">On-Hold (Gateway Error)</option>
+                                    <option value="Subscription Expired">Subscription Expired</option>
+                                    <option value="Subscription On-Hold">Subscription On-Hold</option>
+                                    <option value="Pending Cancellation">Pending Cancellation</option>
+                                    <option value="System Cancelled">System Cancelled</option>
+                                </optgroup>
+                                <optgroup label="Admin">
+                                    <option value="Admin Cancelled">Admin Cancelled</option>
+                                    <option value="Admin On-hold">Admin On-hold</option>
+                                </optgroup>
                             </select>
                         </div>
                         <div class="ihd-filter-group">
@@ -616,6 +646,7 @@ JS;
             padding: 6px 10px; border: 1px solid #c3c4c7; border-radius: 4px;
             font-size: 13px; min-width: 140px; background: #fff;
         }
+        .ihd-filter-select { min-width: 200px; }
         .ihd-filter-select:focus, .ihd-filter-input:focus {
             border-color: #2271b1; box-shadow: 0 0 0 1px #2271b1; outline: none;
         }
@@ -663,6 +694,9 @@ JS;
         .ihd-badge-yes { background: #edfaef; color: #007017; }
         .ihd-badge-no { background: #f0f6fc; color: #2271b1; }
         .ihd-badge-reason { background: #fcf0e3; color: #996800; }
+        .ihd-badge-danger { background: #fef0ef; color: #d63638; }
+        .ihd-badge-warning { background: #fef8ee; color: #9a6700; }
+        .ihd-badge-admin { background: #f0f0f1; color: #50575e; }
 
         /* Pagination */
         .ihd-audit-pagination {
