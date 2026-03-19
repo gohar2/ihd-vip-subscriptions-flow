@@ -217,6 +217,8 @@ class IHD_VIP_Admin {
         ?>
         <div class="wrap ihd-vip-wrap">
 
+            <h1 class="ihd-page-title">IHD VIP Subscriptions</h1>
+
             <?php if ( isset( $_GET['saved'] ) && '1' === $_GET['saved'] ) : ?>
                 <div class="notice notice-success is-dismissible">
                     <p>Settings saved successfully.</p>
@@ -225,10 +227,7 @@ class IHD_VIP_Admin {
 
             <!-- Page Header -->
             <div class="ihd-page-header">
-                <div>
-                    <h1>IHD VIP Subscriptions</h1>
-                    <p class="ihd-page-subtitle">Manage VIP access and view cancellation audit logs</p>
-                </div>
+                <p class="ihd-page-subtitle">Manage VIP access and view cancellation audit logs</p>
                 <div class="ihd-header-badge">
                     <?php if ( $gate_active ) : ?>
                         <span class="ihd-mode-badge ihd-mode-dev"><span class="dashicons dashicons-lock"></span> Development Mode</span>
@@ -514,11 +513,11 @@ JS;
         .ihd-vip-wrap { max-width: 100%; padding-bottom: 40px; }
 
         /* Page Header */
+        .ihd-page-title { font-size: 23px; font-weight: 600; color: #1d2327; margin: 10px 0 4px; }
         .ihd-page-header {
             display: flex; align-items: center; justify-content: space-between;
-            margin: 10px 0 20px; padding: 0;
+            margin: 0 0 20px; padding: 0;
         }
-        .ihd-page-header h1 { margin: 0 0 2px; font-size: 23px; font-weight: 600; color: #1d2327; }
         .ihd-page-subtitle { margin: 0; color: #646970; font-size: 13px; }
 
         .ihd-mode-badge {
