@@ -511,7 +511,7 @@ JS;
     private function get_inline_css() {
         return <<<CSS
         /* Layout */
-        .ihd-vip-wrap { max-width: 1100px; padding-bottom: 40px; }
+        .ihd-vip-wrap { max-width: 100%; padding-bottom: 40px; }
 
         /* Page Header */
         .ihd-page-header {
