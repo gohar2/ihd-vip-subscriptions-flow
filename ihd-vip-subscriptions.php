@@ -22,7 +22,6 @@ define( 'IHD_VIP_BASENAME', plugin_basename( __FILE__ ) );
  * Require class files.
  */
 require_once IHD_VIP_PATH . 'includes/class-installer.php';
-require_once IHD_VIP_PATH . 'includes/class-audit-logger.php';
 
 /**
  * Activation hook — create audit table.
