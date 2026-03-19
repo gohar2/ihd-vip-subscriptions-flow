@@ -7,31 +7,31 @@ class IHD_VIP_Audit_Logger {
 
     private static function table_name() {
         global $wpdb;
-        return $wpdb->prefix . 'ihd_subscription_audit';
+        return $wpdb->prefix . 'ihd_vip_subscription_audit';
     }
 
     /**
      * Log a subscription event to the audit table.
      *
      * @param int    $subscription_id The subscription ID.
+     * @param int    $by_user_id      The user performing the action (owner, admin, or 0 for system).
      * @param bool   $intentional     Whether the action was intentional by the user.
      * @param string $reason          The selected reason or detected cause.
-     * @param string $text            Additional feedback or error detail.
      * @return int|false
      */
-    public static function log( $subscription_id, $intentional, $reason, $text ) {
+    public static function log( $subscription_id, $by_user_id, $intentional, $reason ) {
         global $wpdb;
 
         return $wpdb->insert(
             self::table_name(),
             array(
                 'subscription_id' => absint( $subscription_id ),
+                'by_user_id'      => absint( $by_user_id ),
                 'intentional'     => $intentional ? 1 : 0,
                 'reason'          => sanitize_text_field( $reason ),
-                'text'            => sanitize_textarea_field( $text ),
                 'created_at'      => current_time( 'mysql' ),
             ),
-            array( '%d', '%d', '%s', '%s', '%s' )
+            array( '%d', '%d', '%d', '%s', '%s' )
         );
     }
 

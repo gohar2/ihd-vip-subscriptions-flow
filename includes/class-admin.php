@@ -79,7 +79,7 @@ class IHD_VIP_Admin {
         }
 
         global $wpdb;
-        $table = $wpdb->prefix . 'ihd_subscription_audit';
+        $table = $wpdb->prefix . 'ihd_vip_subscription_audit';
 
         $page     = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
         $reason   = isset( $_GET['filter_reason'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_reason'] ) ) : '';
@@ -163,9 +163,15 @@ class IHD_VIP_Admin {
                     $reason_badge = '<span class="ihd-badge ihd-badge-reason">' . $reason_text . '</span>';
                 }
 
-                $feedback_text = ! empty( $row['text'] )
-                    ? '<div class="ihd-audit-feedback">' . nl2br( esc_html( wp_trim_words( $row['text'], 30 ) ) ) . '</div>'
-                    : '<span class="ihd-audit-muted">No feedback</span>';
+                $by_user_id = absint( $row['by_user_id'] ?? 0 );
+                if ( $by_user_id > 0 ) {
+                    $by_user = get_userdata( $by_user_id );
+                    $feedback_text = $by_user
+                        ? '<strong>' . esc_html( $by_user->display_name ) . '</strong><br><span class="ihd-audit-email">' . esc_html( $by_user->user_email ) . '</span>'
+                        : 'User #' . $by_user_id;
+                } else {
+                    $feedback_text = '<span class="ihd-audit-muted">System / Cron</span>';
+                }
 
                 $date_formatted = wp_date( 'M j, Y', strtotime( $row['created_at'] ) );
                 $time_formatted = wp_date( 'g:i a', strtotime( $row['created_at'] ) );

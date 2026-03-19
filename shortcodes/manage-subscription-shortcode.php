@@ -12,6 +12,59 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
 
   public static function init() {
     add_shortcode(self::SHORTCODE, [__CLASS__, 'render_shortcode']);
+    add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue_my_account_interceptors_scripts']);
+  }
+
+  /**
+   * On the My Account page, rewrite WCS Cancel / Switch button HREFs
+   * so they point to our manage-subscription endpoint instead.
+   */
+  public static function enqueue_my_account_interceptors_scripts() {
+    if ( ! function_exists( 'is_account_page' ) || ! is_account_page() ) {
+      return;
+    }
+
+    wp_enqueue_script('jquery');
+
+    $inline_js = <<<'JS'
+jQuery(function($) {
+  if (window.subscriptionId) return;
+
+  var $cancelBtn = $('a.woocommerce-button.button.cancel');
+  var $switchBtn = $('a.wcs-switch-link.button');
+
+  try {
+    var subscriptionId = null;
+
+    // Try cancel button first: URL has ?subscription_id=…
+    var cancelHref = $cancelBtn.attr('href');
+    if (cancelHref) {
+      var cancelUrl = new URL(cancelHref, window.location.origin);
+      subscriptionId = cancelUrl.searchParams.get('subscription_id');
+    }
+
+    // Fallback: try the switch/upgrade button: URL has ?switch-subscription=…
+    if (!subscriptionId) {
+      var switchHref = $switchBtn.first().attr('href');
+      if (switchHref) {
+        var switchUrl = new URL(switchHref, window.location.origin);
+        subscriptionId = switchUrl.searchParams.get('switch-subscription');
+      }
+    }
+
+    if (!subscriptionId) return;
+
+    var managePageUrl = '/my-account/manage-subscription/?subscription=' + subscriptionId;
+    if ($cancelBtn.length) $cancelBtn.attr('href', managePageUrl + '#cancel');
+    if ($switchBtn.length) $switchBtn.attr('href', managePageUrl + '#upgrade-downgrade');
+    window.subscriptionId = subscriptionId;
+  } catch (e) {
+    console.error('IFX: Failed to intercept subscription buttons', e);
+  }
+});
+JS;
+
+    wp_add_inline_script('jquery', $inline_js);
   }
 
   public static function render_shortcode($atts = [], $content = null, $shortcode_tag = '') {
@@ -31,6 +84,9 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
     $current_price    = esc_html($atts['current_price']);
     $current_interval = esc_html($atts['current_interval']);
     $next_bill        = esc_html($atts['next_bill']);
+
+    /* ── Subscription ID from query param ── */
+    $subscription_id = isset( $_GET['subscription'] ) ? absint( $_GET['subscription'] ) : 0;
 
     /* ── Fetch slider posts ── */
     $slider_posts = self::get_slider_posts(
@@ -802,6 +858,21 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           color: var(--muted);
           margin-top: 2px;
         }
+
+        /* Fullscreen loading overlay */
+        .ihd-vip-overlay {
+          position: fixed; inset: 0; z-index: 99999;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(255,255,255,.7);
+        }
+        .ihd-vip-overlay .ihd-spinner {
+          width: 40px; height: 40px;
+          border: 4px solid #e8e0db;
+          border-top-color: var(--brand-red, #c84b31);
+          border-radius: 50%;
+          animation: ihd-spin .6s linear infinite;
+        }
+        @keyframes ihd-spin { to { transform: rotate(360deg); } }
       </style>
 
       <div class="wrap">
@@ -835,7 +906,7 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
         </div>
 
         <!-- ═══ Accordion: Upgrade/Downgrade ═══ -->
-        <section class="section" data-acc data-open="0">
+        <section class="section" data-acc data-acc-id="upgrade-downgrade" data-open="0">
           <button class="acc-h" type="button" data-acc-toggle aria-expanded="false">
             <div class="acc-left">
               <div class="acc-ico ico-upgrade" aria-hidden="true">
@@ -927,7 +998,7 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
         </section>
 
         <!-- ═══ Accordion: Pause ═══ -->
-        <section class="section" data-acc data-open="0">
+        <section class="section" data-acc data-acc-id="pause" data-open="0">
           <button class="acc-h" type="button" data-acc-toggle aria-expanded="false">
             <div class="acc-left">
               <div class="acc-ico ico-pause" aria-hidden="true">
@@ -980,7 +1051,7 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
         </section>
 
         <!-- ═══ Accordion: Cancel — inline multi-step ═══ -->
-        <section class="section" data-acc data-open="0" data-cancel-section>
+        <section class="section" data-acc data-acc-id="cancel" data-open="0" data-cancel-section>
           <button class="acc-h" type="button" data-acc-toggle aria-expanded="false">
             <div class="acc-left">
               <div class="acc-ico ico-cancel" aria-hidden="true">
@@ -1153,6 +1224,30 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           const root = document.getElementById(<?php echo json_encode($uid); ?>);
           if (!root) return;
 
+          const cfg = {
+            ajaxUrl: <?php echo json_encode( admin_url( 'admin-ajax.php' ) ); ?>,
+            nonce:   <?php echo json_encode( wp_create_nonce( 'ihd_vip_nonce' ) ); ?>,
+            subId:   <?php echo (int) $subscription_id; ?>,
+          };
+
+          /* ── Screen blocker helpers ── */
+          function showOverlay() {
+            if (window.jQuery && typeof jQuery.fn.block === 'function') {
+              jQuery(document.body).block({ message: null, overlayCSS: { background: '#fff', opacity: 0.6 } });
+            } else {
+              const o = document.createElement('div');
+              o.className = 'ihd-vip-overlay';
+              o.id = 'ihd-vip-overlay';
+              o.innerHTML = '<div class="ihd-spinner"></div>';
+              document.body.appendChild(o);
+            }
+          }
+          function hideOverlay() {
+            if (window.jQuery && typeof jQuery.fn.unblock === 'function') jQuery(document.body).unblock();
+            const o = document.getElementById('ihd-vip-overlay');
+            if (o) o.remove();
+          }
+
           /* ── Accordions ── */
           root.querySelectorAll('[data-acc]').forEach(sec => {
             const btn = sec.querySelector('[data-acc-toggle]');
@@ -1164,6 +1259,20 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
               btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
             });
           });
+
+          /* ── Hash → open accordion on load and hash change ── */
+          function openAccordionByHash() {
+            const hash = window.location.hash.replace('#', '').trim();
+            if (!hash) return;
+            const target = root.querySelector('[data-acc-id="' + CSS.escape(hash) + '"]');
+            if (!target) return;
+            target.setAttribute('data-open', '1');
+            const btn = target.querySelector('[data-acc-toggle]');
+            if (btn) btn.setAttribute('aria-expanded', 'true');
+            setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+          }
+          openAccordionByHash();
+          window.addEventListener('hashchange', openAccordionByHash);
 
           /* ── Plan Selection (inline, no modal) ── */
           const plansWrap = root.querySelector('[data-plans]');
@@ -1275,7 +1384,42 @@ final class Hero_VIP_Manage_Subscription_Refined_Shortcode {
           }
 
           if (doCancelBtn) {
-            doCancelBtn.addEventListener('click', () => showCancelStep('done'));
+            doCancelBtn.addEventListener('click', () => {
+              if (!selectedReason || !cfg.subId) return;
+
+              showOverlay();
+              doCancelBtn.disabled = true;
+              doCancelBtn.textContent = 'Cancelling\u2026';
+
+              fetch(cfg.ajaxUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                  action: 'ihd_vip_cancel_subscription',
+                  nonce: cfg.nonce,
+                  subscription_id: cfg.subId,
+                  reason: selectedReason,
+                  feedback: '',
+                }),
+              })
+                .then(r => r.json())
+                .then(data => {
+                  hideOverlay();
+                  if (data.success) {
+                    showCancelStep('done');
+                  } else {
+                    doCancelBtn.disabled = false;
+                    doCancelBtn.textContent = 'Confirm Cancellation';
+                    alert(data.data && data.data.message ? data.data.message : 'Something went wrong. Please try again.');
+                  }
+                })
+                .catch(() => {
+                  hideOverlay();
+                  doCancelBtn.disabled = false;
+                  doCancelBtn.textContent = 'Confirm Cancellation';
+                  alert('Network error. Please try again.');
+                });
+            });
           }
 
           /* ── Carousel with translateX + auto-play ── */

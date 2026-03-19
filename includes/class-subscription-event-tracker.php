@@ -86,10 +86,10 @@ class IHD_VIP_Subscription_Event_Tracker {
         }
 
         // Determine the reason and gather context.
-        $reason = $this->determine_status_change_reason( $subscription, $new_status, $old_status );
-        $detail = $this->build_status_change_detail( $subscription, $new_status, $old_status );
+        $reason     = $this->determine_status_change_reason( $subscription, $new_status, $old_status );
+        $by_user_id = get_current_user_id(); // 0 for system/cron, admin ID for admin actions.
 
-        IHD_VIP_Audit_Logger::log( $subscription_id, false, $reason, $detail );
+        IHD_VIP_Audit_Logger::log( $subscription_id, $by_user_id, false, $reason );
     }
 
     /**
@@ -116,17 +116,7 @@ class IHD_VIP_Subscription_Event_Tracker {
             $reason = 'Integration/Gateway Error';
         }
 
-        $detail = sprintf(
-            "Renewal order #%d failed.\nGateway: %s\nAmount: %s %s\nError: %s\nError Type: %s",
-            $order_id,
-            $gateway,
-            $amount,
-            $currency,
-            $error_message ?: 'No error message captured',
-            $this->get_error_type_label( $error_type )
-        );
-
-        IHD_VIP_Audit_Logger::log( $subscription_id, false, $reason, $detail );
+        IHD_VIP_Audit_Logger::log( $subscription_id, 0, false, $reason );
     }
 
     /**
