@@ -2,7 +2,7 @@
 /**
  * Plugin Name: IHD VIP Subscriptions
  * Description: VIP Subscription Modal Interception & Inline Switch System
- * Version: 1.0.3
+ * Version: 1.1.0
  * Author: Syed
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-define( 'IHD_VIP_VERSION', '1.0.3' );
+define( 'IHD_VIP_VERSION', '1.1.0' );
 define( 'IHD_VIP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'IHD_VIP_URL', plugin_dir_url( __FILE__ ) );
 define( 'IHD_VIP_BASENAME', plugin_basename( __FILE__ ) );
@@ -23,6 +23,7 @@ define( 'IHD_VIP_BASENAME', plugin_basename( __FILE__ ) );
  */
 require_once IHD_VIP_PATH . 'includes/class-installer.php';
 require_once IHD_VIP_PATH . 'includes/class-audit-logger.php';
+require_once IHD_VIP_PATH . 'includes/class-user-scope-gate.php';
 
 /**
  * Activation hook — create audit table.
@@ -88,16 +89,10 @@ function ihd_vip_init_early() {
 function ihd_vip_init_frontend() {
 
     // ─── Layer 2: Adaptive User Scope Gate ───
-    // If the gate file exists, use it to restrict frontend UI loading.
-    // If the file is deleted, the plugin loads for everyone (production mode).
-    $gate_file = IHD_VIP_PATH . 'includes/class-user-scope-gate.php';
-
-    if ( file_exists( $gate_file ) ) {
-        require_once $gate_file;
-
-        if ( ! IHD_VIP_User_Scope_Gate::is_user_allowed() ) {
-            return; // Current user is not in the allowed list — stop frontend UI.
-        }
+    // In development mode, restrict frontend UI to allowed users only.
+    // In production mode, all logged-in users can access.
+    if ( ! IHD_VIP_User_Scope_Gate::is_user_allowed() ) {
+        return; // Current user is not allowed — stop frontend UI.
     }
 
     // ─── Shortcode: Manage Subscription page ───

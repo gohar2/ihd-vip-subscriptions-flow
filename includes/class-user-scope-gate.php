@@ -1,9 +1,10 @@
 <?php
 /**
- * User Scope Gate — Adaptive / Removable
+ * User Scope Gate — Option-Based Toggle
  *
- * This file controls which users can see the VIP subscription features.
- * Delete this file to make the plugin load for ALL users (production mode).
+ * Controls which users can see the VIP subscription features.
+ * Admin can toggle between Development Mode (scoped) and Production Mode (open)
+ * from the IHD VIP Subscriptions admin page.
  *
  * @package IHD_VIP_Subscriptions
  */
@@ -20,18 +21,41 @@ class IHD_VIP_User_Scope_Gate {
     const OPTION_KEY = 'ihd_vip_scoped_users';
 
     /**
-     * Check if the current logged-in user is in the allowed list.
+     * Option key storing the scope mode ('development' or 'production').
+     */
+    const MODE_OPTION_KEY = 'ihd_vip_scope_mode';
+
+    /**
+     * Check if the scope gate is in development (scoped) mode.
      *
-     * @return bool True if user is allowed (or no users are configured), false otherwise.
+     * @return bool True if development mode is active.
+     */
+    public static function is_development_mode() {
+        return 'production' !== get_option( self::MODE_OPTION_KEY, 'development' );
+    }
+
+    /**
+     * Check if the current logged-in user is allowed to see the VIP interface.
+     *
+     * In production mode, all logged-in users are allowed.
+     * In development mode, only users in the scoped list are allowed.
+     *
+     * @return bool True if user is allowed, false otherwise.
      */
     public static function is_user_allowed() {
         $current_user_id = get_current_user_id();
 
-        // Not logged in — allow (public pages shouldn't be gated).
+        // Not logged in — deny.
         if ( ! $current_user_id ) {
             return false;
         }
 
+        // Production mode — allow all logged-in users.
+        if ( ! self::is_development_mode() ) {
+            return true;
+        }
+
+        // Development mode — check the scoped list.
         $allowed_users = get_option( self::OPTION_KEY, array() );
 
         // If no users have been selected yet, deny all (force admin to configure).

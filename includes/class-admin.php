@@ -14,6 +14,7 @@ class IHD_VIP_Admin {
         add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
         add_action( 'wp_ajax_ihd_vip_search_users', array( $this, 'ajax_search_users' ) );
         add_action( 'wp_ajax_ihd_vip_audit_logs', array( $this, 'ajax_audit_logs' ) );
+        add_action( 'wp_ajax_ihd_vip_toggle_scope_mode', array( $this, 'ajax_toggle_scope_mode' ) );
         add_action( 'admin_post_ihd_vip_save_settings', array( $this, 'save_settings' ) );
     }
 
@@ -71,6 +72,30 @@ class IHD_VIP_Admin {
         wp_send_json( array( 'results' => $results ) );
     }
 
+    /**
+     * AJAX handler: Toggle scope mode between development and production.
+     */
+    public function ajax_toggle_scope_mode() {
+        check_ajax_referer( 'ihd_vip_admin_nonce', 'nonce' );
+
+        if ( ! current_user_can( 'manage_woocommerce' ) ) {
+            wp_send_json_error( 'Unauthorized' );
+        }
+
+        $new_mode = isset( $_POST['mode'] ) ? sanitize_text_field( wp_unslash( $_POST['mode'] ) ) : '';
+
+        if ( ! in_array( $new_mode, array( 'development', 'production' ), true ) ) {
+            wp_send_json_error( 'Invalid mode.' );
+        }
+
+        update_option( IHD_VIP_User_Scope_Gate::MODE_OPTION_KEY, $new_mode );
+
+        wp_send_json_success( array(
+            'mode'  => $new_mode,
+            'label' => 'production' === $new_mode ? 'Production Mode' : 'Development Mode',
+        ) );
+    }
+
     public function ajax_audit_logs() {
         check_ajax_referer( 'ihd_vip_admin_nonce', 'nonce' );
 
@@ -81,42 +106,45 @@ class IHD_VIP_Admin {
         global $wpdb;
         $table = $wpdb->prefix . 'ihd_vip_subscription_audit';
 
-        $page     = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
-        $reason   = isset( $_GET['filter_reason'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_reason'] ) ) : '';
-        $user_id  = isset( $_GET['filter_user'] ) ? absint( $_GET['filter_user'] ) : 0;
-        $date_from = isset( $_GET['date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['date_from'] ) ) : '';
-        $date_to   = isset( $_GET['date_to'] ) ? sanitize_text_field( wp_unslash( $_GET['date_to'] ) ) : '';
+        $page       = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
+        $reason     = isset( $_GET['filter_reason'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_reason'] ) ) : '';
+        $event_type = isset( $_GET['filter_event_type'] ) ? sanitize_text_field( wp_unslash( $_GET['filter_event_type'] ) ) : '';
+        $user_id    = isset( $_GET['filter_user'] ) ? absint( $_GET['filter_user'] ) : 0;
+        $date_from  = isset( $_GET['date_from'] ) ? sanitize_text_field( wp_unslash( $_GET['date_from'] ) ) : '';
+        $date_to    = isset( $_GET['date_to'] ) ? sanitize_text_field( wp_unslash( $_GET['date_to'] ) ) : '';
 
-        $where = array( '1=1' );
+        $where  = array( '1=1' );
         $params = array();
 
         if ( $reason !== '' ) {
-            $where[] = 'a.reason = %s';
+            $where[]  = 'a.reason = %s';
             $params[] = $reason;
         }
 
+        if ( $event_type !== '' ) {
+            $where[]  = 'a.event_type = %s';
+            $params[] = $event_type;
+        }
+
         if ( $user_id > 0 ) {
-            $where[] = 'pm.meta_value = %d';
+            $where[]  = 'a.customer_id = %d';
             $params[] = $user_id;
         }
 
         if ( $date_from !== '' ) {
-            $where[] = 'a.created_at >= %s';
+            $where[]  = 'a.created_at >= %s';
             $params[] = $date_from . ' 00:00:00';
         }
 
         if ( $date_to !== '' ) {
-            $where[] = 'a.created_at <= %s';
+            $where[]  = 'a.created_at <= %s';
             $params[] = $date_to . ' 23:59:59';
         }
 
         $where_sql = implode( ' AND ', $where );
 
-        // Join with postmeta to get subscription owner
-        $join = "LEFT JOIN {$wpdb->postmeta} pm ON a.subscription_id = pm.post_id AND pm.meta_key = '_customer_user'";
-
         // Count
-        $count_sql = "SELECT COUNT(*) FROM {$table} a {$join} WHERE {$where_sql}";
+        $count_sql = "SELECT COUNT(*) FROM {$table} a WHERE {$where_sql}";
         if ( ! empty( $params ) ) {
             $count_sql = $wpdb->prepare( $count_sql, $params );
         }
@@ -124,36 +152,66 @@ class IHD_VIP_Admin {
 
         $offset = ( $page - 1 ) * self::PER_PAGE;
 
-        // Data
-        $data_sql = "SELECT a.*, pm.meta_value AS user_id FROM {$table} a {$join} WHERE {$where_sql} ORDER BY a.created_at DESC LIMIT %d OFFSET %d";
+        // Data — ordered by id DESC for deterministic ordering.
+        $data_sql    = "SELECT a.* FROM {$table} a WHERE {$where_sql} ORDER BY a.id DESC LIMIT %d OFFSET %d";
         $data_params = array_merge( $params, array( self::PER_PAGE, $offset ) );
-        $rows = $wpdb->get_results( $wpdb->prepare( $data_sql, $data_params ), ARRAY_A );
+        $rows        = $wpdb->get_results( $wpdb->prepare( $data_sql, $data_params ), ARRAY_A );
 
         // Build HTML rows
         $html = '';
         if ( empty( $rows ) ) {
-            $html = '<tr><td colspan="7" class="ihd-audit-empty">No audit log entries found.</td></tr>';
+            $html = '<tr><td colspan="10" class="ihd-audit-empty">No audit log entries found.</td></tr>';
         } else {
             foreach ( $rows as $row ) {
-                $user_info = '—';
-                if ( ! empty( $row['user_id'] ) ) {
-                    $u = get_userdata( (int) $row['user_id'] );
+                // Customer info.
+                $customer_info = '—';
+                $cid = absint( $row['customer_id'] ?? 0 );
+                if ( $cid > 0 ) {
+                    $u = get_userdata( $cid );
                     if ( $u ) {
-                        $user_info = '<strong>' . esc_html( $u->display_name ) . '</strong><br><span class="ihd-audit-email">' . esc_html( $u->user_email ) . '</span>';
+                        $customer_info = '<strong>' . esc_html( $u->display_name ) . '</strong><br><span class="ihd-audit-email">' . esc_html( $u->user_email ) . '</span>';
                     }
                 }
 
-                $intentional_badge = $row['intentional']
-                    ? '<span class="ihd-badge ihd-badge-yes">User-initiated</span>'
-                    : '<span class="ihd-badge ihd-badge-no">System</span>';
+                // Event type badge.
+                $event_type_val = esc_html( $row['event_type'] ?? '' );
+                $event_badge_class = 'ihd-badge-no';
+                switch ( $row['event_type'] ) {
+                    case 'cancellation':
+                        $event_badge_class = 'ihd-badge-danger';
+                        break;
+                    case 'payment_failure':
+                        $event_badge_class = 'ihd-badge-warning';
+                        break;
+                    case 'expiration':
+                        $event_badge_class = 'ihd-badge-admin';
+                        break;
+                    case 'on_hold':
+                        $event_badge_class = 'ihd-badge-no';
+                        break;
+                    case 'pending_cancel':
+                        $event_badge_class = 'ihd-badge-reason';
+                        break;
+                }
+                $event_badge = $event_type_val ? '<span class="ihd-badge ' . $event_badge_class . '">' . $event_type_val . '</span>' : '<span class="ihd-audit-muted">—</span>';
 
-                // Color-code reason badges by type.
+                // Intentional badge.
+                $intentional_badge = $row['intentional']
+                    ? '<span class="ihd-badge ihd-badge-yes">Intentional</span>'
+                    : '<span class="ihd-badge ihd-badge-no">Unintentional</span>';
+
+                // Status transition.
+                $old_s = esc_html( $row['old_status'] ?? '' );
+                $new_s = esc_html( $row['new_status'] ?? '' );
+                $status_text = ( $old_s && $new_s ) ? $old_s . ' → ' . $new_s : '—';
+
+                // Reason badge.
                 $reason_text = esc_html( $row['reason'] );
                 if ( ! $row['reason'] ) {
                     $reason_badge = '<span class="ihd-audit-muted">—</span>';
                 } elseif ( stripos( $row['reason'], 'Integration' ) !== false || stripos( $row['reason'], 'Gateway Error' ) !== false ) {
                     $reason_badge = '<span class="ihd-badge ihd-badge-danger">' . $reason_text . '</span>';
-                } elseif ( stripos( $row['reason'], 'Payment Failed' ) !== false || stripos( $row['reason'], 'Max Retries' ) !== false ) {
+                } elseif ( stripos( $row['reason'], 'Payment Failed' ) !== false || stripos( $row['reason'], 'Renewal Failed' ) !== false || stripos( $row['reason'], 'Max Retries' ) !== false ) {
                     $reason_badge = '<span class="ihd-badge ihd-badge-warning">' . $reason_text . '</span>';
                 } elseif ( stripos( $row['reason'], 'Admin' ) !== false ) {
                     $reason_badge = '<span class="ihd-badge ihd-badge-admin">' . $reason_text . '</span>';
@@ -163,6 +221,29 @@ class IHD_VIP_Admin {
                     $reason_badge = '<span class="ihd-badge ihd-badge-reason">' . $reason_text . '</span>';
                 }
 
+                // Payment info.
+                $payment_info = '';
+                if ( ! empty( $row['payment_method'] ) ) {
+                    $payment_info .= esc_html( $row['payment_method'] );
+                }
+                if ( ! empty( $row['payment_error_type'] ) && 'unknown' !== $row['payment_error_type'] ) {
+                    $err_class = 'integration_error' === $row['payment_error_type'] ? 'ihd-badge-danger' : 'ihd-badge-warning';
+                    $payment_info .= '<br><span class="ihd-badge ' . $err_class . '">' . esc_html( $row['payment_error_type'] ) . '</span>';
+                }
+                if ( empty( $payment_info ) ) {
+                    $payment_info = '<span class="ihd-audit-muted">—</span>';
+                }
+
+                // Amount.
+                $amount_text = '<span class="ihd-audit-muted">—</span>';
+                if ( floatval( $row['subscription_amount'] ) > 0 ) {
+                    $amount_text = esc_html( $row['currency'] ) . ' ' . esc_html( number_format( $row['subscription_amount'], 2 ) );
+                    if ( ! empty( $row['billing_period'] ) ) {
+                        $amount_text .= ' / ' . esc_html( $row['billing_period'] );
+                    }
+                }
+
+                // Triggered by.
                 $by_user_id = absint( $row['by_user_id'] ?? 0 );
                 if ( $by_user_id > 0 ) {
                     $by_user = get_userdata( $by_user_id );
@@ -173,19 +254,29 @@ class IHD_VIP_Admin {
                     $feedback_text = '<span class="ihd-audit-muted">System / Cron</span>';
                 }
 
+                // Date.
                 $date_formatted = wp_date( 'M j, Y', strtotime( $row['created_at'] ) );
                 $time_formatted = wp_date( 'g:i a', strtotime( $row['created_at'] ) );
-                $human_time = human_time_diff( strtotime( $row['created_at'] ), current_time( 'timestamp' ) ) . ' ago';
+                $human_time     = human_time_diff( strtotime( $row['created_at'] ), current_time( 'timestamp' ) ) . ' ago';
 
                 $sub_link = admin_url( 'post.php?post=' . absint( $row['subscription_id'] ) . '&action=edit' );
 
-                $html .= '<tr>';
+                // Detail tooltip.
+                $detail_attr = '';
+                if ( ! empty( $row['detail'] ) ) {
+                    $detail_attr = ' title="' . esc_attr( wp_strip_all_tags( $row['detail'] ) ) . '"';
+                }
+
+                $html .= '<tr' . $detail_attr . '>';
                 $html .= '<td class="column-id">#' . esc_html( $row['id'] ) . '</td>';
                 $html .= '<td class="column-subscription"><a href="' . esc_url( $sub_link ) . '" target="_blank">#' . esc_html( $row['subscription_id'] ) . '</a></td>';
-                $html .= '<td class="column-user">' . $user_info . '</td>';
+                $html .= '<td class="column-user">' . $customer_info . '</td>';
+                $html .= '<td class="column-event">' . $event_badge . '</td>';
+                $html .= '<td class="column-status">' . $status_text . '</td>';
                 $html .= '<td class="column-type">' . $intentional_badge . '</td>';
                 $html .= '<td class="column-reason">' . $reason_badge . '</td>';
-                $html .= '<td class="column-feedback">' . $feedback_text . '</td>';
+                $html .= '<td class="column-payment">' . $payment_info . '</td>';
+                $html .= '<td class="column-amount">' . $amount_text . '</td>';
                 $html .= '<td class="column-date"><strong>' . esc_html( $date_formatted ) . '</strong><br><span class="ihd-audit-muted">' . esc_html( $time_formatted ) . '</span><br><span class="ihd-audit-muted ihd-audit-human-time">' . esc_html( $human_time ) . '</span></td>';
                 $html .= '</tr>';
             }
@@ -194,7 +285,7 @@ class IHD_VIP_Admin {
         // Pagination
         $total_pages = max( 1, ceil( $total / self::PER_PAGE ) );
         $showing_from = $total > 0 ? $offset + 1 : 0;
-        $showing_to = min( $offset + self::PER_PAGE, $total );
+        $showing_to   = min( $offset + self::PER_PAGE, $total );
 
         wp_send_json_success( array(
             'html'        => $html,
@@ -230,7 +321,7 @@ class IHD_VIP_Admin {
 
     public function render_settings_page() {
         $saved_users = get_option( self::OPTION_KEY, array() );
-        $gate_active = file_exists( IHD_VIP_PATH . 'includes/class-user-scope-gate.php' );
+        $is_dev_mode = IHD_VIP_User_Scope_Gate::is_development_mode();
         $user_count  = count( $saved_users );
         ?>
         <div class="wrap ihd-vip-wrap">
@@ -247,11 +338,10 @@ class IHD_VIP_Admin {
             <div class="ihd-page-header">
                 <p class="ihd-page-subtitle">Manage VIP access and view cancellation audit logs</p>
                 <div class="ihd-header-badge">
-                    <?php if ( $gate_active ) : ?>
-                        <span class="ihd-mode-badge ihd-mode-dev"><span class="dashicons dashicons-lock"></span> Development Mode</span>
-                    <?php else : ?>
-                        <span class="ihd-mode-badge ihd-mode-prod"><span class="dashicons dashicons-unlock"></span> Production Mode</span>
-                    <?php endif; ?>
+                    <span class="ihd-mode-badge <?php echo $is_dev_mode ? 'ihd-mode-dev' : 'ihd-mode-prod'; ?>" id="ihd-mode-badge">
+                        <span class="dashicons <?php echo $is_dev_mode ? 'dashicons-lock' : 'dashicons-unlock'; ?>" id="ihd-mode-icon"></span>
+                        <span id="ihd-mode-label"><?php echo $is_dev_mode ? 'Development Mode' : 'Production Mode'; ?></span>
+                    </span>
                 </div>
             </div>
 
@@ -267,7 +357,7 @@ class IHD_VIP_Admin {
                 <div class="ihd-stat-card">
                     <div class="ihd-stat-icon ihd-stat-icon-gate"><span class="dashicons dashicons-shield"></span></div>
                     <div class="ihd-stat-content">
-                        <span class="ihd-stat-number"><?php echo $gate_active ? 'Scoped' : 'Open'; ?></span>
+                        <span class="ihd-stat-number" id="ihd-stat-mode"><?php echo $is_dev_mode ? 'Scoped' : 'Open'; ?></span>
                         <span class="ihd-stat-label">Access Mode</span>
                     </div>
                 </div>
@@ -280,20 +370,32 @@ class IHD_VIP_Admin {
                 </div>
             </div>
 
-            <!-- Allowed Users Card -->
+            <!-- Scope Mode Toggle Card -->
             <div class="ihd-card">
                 <div class="ihd-card-header">
-                    <h2><span class="dashicons dashicons-admin-users"></span> Allowed Users</h2>
-                    <?php if ( ! $gate_active ) : ?>
-                        <span class="ihd-card-notice">Scope gate is disabled — user selection has no effect</span>
-                    <?php endif; ?>
+                    <h2><span class="dashicons dashicons-shield-alt"></span> Scope Mode</h2>
                 </div>
                 <div class="ihd-card-body">
-                    <?php if ( $gate_active ) : ?>
-                        <p class="ihd-card-desc">Search and select users who should have access to VIP subscription features. Only these users will see the VIP interface while in development mode.</p>
-                    <?php else : ?>
-                        <p class="ihd-card-desc">The scope gate file has been removed. All users currently have access. To restrict access, restore <code>includes/class-user-scope-gate.php</code>.</p>
-                    <?php endif; ?>
+                    <p class="ihd-card-desc">Toggle between <strong>Development Mode</strong> (only selected users see VIP features) and <strong>Production Mode</strong> (all logged-in users can access).</p>
+                    <div class="ihd-toggle-wrap">
+                        <label class="ihd-toggle">
+                            <input type="checkbox" id="ihd-scope-toggle" <?php checked( ! $is_dev_mode ); ?>>
+                            <span class="ihd-toggle-slider"></span>
+                        </label>
+                        <span class="ihd-toggle-label" id="ihd-toggle-label">
+                            <?php echo $is_dev_mode ? 'Development Mode — Only selected users can access VIP features' : 'Production Mode — All logged-in users can access VIP features'; ?>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Allowed Users Card -->
+            <div class="ihd-card" id="ihd-users-card" style="<?php echo $is_dev_mode ? '' : 'display:none;'; ?>">
+                <div class="ihd-card-header">
+                    <h2><span class="dashicons dashicons-admin-users"></span> Allowed Users</h2>
+                </div>
+                <div class="ihd-card-body">
+                    <p class="ihd-card-desc">Search and select users who should have access to VIP subscription features. Only these users will see the VIP interface while in development mode.</p>
 
                     <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
                         <input type="hidden" name="action" value="ihd_vip_save_settings">
@@ -306,7 +408,6 @@ class IHD_VIP_Admin {
                                 name="ihd_vip_users[]"
                                 class="ihd-vip-user-select"
                                 multiple="multiple"
-                                <?php echo $gate_active ? '' : 'disabled'; ?>
                             >
                                 <?php
                                 if ( ! empty( $saved_users ) ) {
@@ -329,7 +430,7 @@ class IHD_VIP_Admin {
                         </div>
 
                         <div class="ihd-card-footer">
-                            <?php submit_button( 'Save Settings', 'primary ihd-save-btn', 'submit', false, $gate_active ? array() : array( 'disabled' => 'disabled' ) ); ?>
+                            <?php submit_button( 'Save Settings', 'primary ihd-save-btn', 'submit', false ); ?>
                         </div>
                     </form>
                 </div>
@@ -338,12 +439,23 @@ class IHD_VIP_Admin {
             <!-- Audit Logs Card -->
             <div class="ihd-card ihd-card-audit">
                 <div class="ihd-card-header">
-                    <h2><span class="dashicons dashicons-clipboard"></span> Cancellation Audit Logs</h2>
+                    <h2><span class="dashicons dashicons-clipboard"></span> Subscription Audit Logs</h2>
                     <span class="ihd-audit-summary" id="ihd-audit-summary"></span>
                 </div>
                 <div class="ihd-card-body">
                     <!-- Filters -->
                     <div class="ihd-audit-filters">
+                        <div class="ihd-filter-group">
+                            <label for="ihd-filter-event-type">Event Type</label>
+                            <select id="ihd-filter-event-type" class="ihd-filter-select">
+                                <option value="">All Events</option>
+                                <option value="cancellation">Cancellation</option>
+                                <option value="payment_failure">Payment Failure</option>
+                                <option value="expiration">Expiration</option>
+                                <option value="on_hold">On-Hold</option>
+                                <option value="pending_cancel">Pending Cancel</option>
+                            </select>
+                        </div>
                         <div class="ihd-filter-group">
                             <label for="ihd-filter-reason">Reason</label>
                             <select id="ihd-filter-reason" class="ihd-filter-select">
@@ -357,6 +469,9 @@ class IHD_VIP_Admin {
                                 </optgroup>
                                 <optgroup label="System-Detected">
                                     <option value="Renewal Payment Failed">Renewal Payment Failed</option>
+                                    <option value="Renewal Failed (Insufficient Funds)">Renewal Failed (Insufficient Funds)</option>
+                                    <option value="Renewal Failed (Expired Card)">Renewal Failed (Expired Card)</option>
+                                    <option value="Renewal Failed (Payment Declined)">Renewal Failed (Payment Declined)</option>
                                     <option value="Integration/Gateway Error">Integration/Gateway Error</option>
                                     <option value="Auto-cancelled (Payment Failed)">Auto-cancelled (Payment Failed)</option>
                                     <option value="Auto-cancelled (Max Retries Exceeded)">Auto-cancelled (Max Retries)</option>
@@ -374,7 +489,7 @@ class IHD_VIP_Admin {
                             </select>
                         </div>
                         <div class="ihd-filter-group">
-                            <label for="ihd-filter-user">User ID</label>
+                            <label for="ihd-filter-user">Customer ID</label>
                             <input type="number" id="ihd-filter-user" class="ihd-filter-input" placeholder="e.g. 123" min="1">
                         </div>
                         <div class="ihd-filter-group">
@@ -399,14 +514,17 @@ class IHD_VIP_Admin {
                                     <th class="column-id">ID</th>
                                     <th class="column-subscription">Subscription</th>
                                     <th class="column-user">Customer</th>
-                                    <th class="column-type">Type</th>
+                                    <th class="column-event">Event</th>
+                                    <th class="column-status">Status</th>
+                                    <th class="column-type">Intent</th>
                                     <th class="column-reason">Reason</th>
-                                    <th class="column-feedback">Feedback</th>
+                                    <th class="column-payment">Payment</th>
+                                    <th class="column-amount">Amount</th>
                                     <th class="column-date">Date</th>
                                 </tr>
                             </thead>
                             <tbody id="ihd-audit-tbody">
-                                <tr><td colspan="7" class="ihd-audit-loading"><span class="spinner is-active"></span> Loading audit logs...</td></tr>
+                                <tr><td colspan="10" class="ihd-audit-loading"><span class="spinner is-active"></span> Loading audit logs...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -451,6 +569,40 @@ class IHD_VIP_Admin {
                 width: '100%'
             });
 
+            // Scope Mode Toggle
+            $('#ihd-scope-toggle').on('change', function() {
+                var isProduction = $(this).is(':checked');
+                var newMode = isProduction ? 'production' : 'development';
+                var toggle = $(this);
+
+                toggle.prop('disabled', true);
+
+                $.post('{$ajax_url}', {
+                    action: 'ihd_vip_toggle_scope_mode',
+                    nonce: '{$nonce}',
+                    mode: newMode
+                }, function(resp) {
+                    toggle.prop('disabled', false);
+                    if (resp.success) {
+                        var d = resp.data;
+                        $('#ihd-mode-label').text(d.label);
+                        $('#ihd-mode-badge').attr('class', 'ihd-mode-badge ' + (d.mode === 'production' ? 'ihd-mode-prod' : 'ihd-mode-dev'));
+                        $('#ihd-mode-icon').attr('class', 'dashicons ' + (d.mode === 'production' ? 'dashicons-unlock' : 'dashicons-lock'));
+                        $('#ihd-stat-mode').text(d.mode === 'production' ? 'Open' : 'Scoped');
+                        $('#ihd-toggle-label').text(d.mode === 'production'
+                            ? 'Production Mode — All logged-in users can access VIP features'
+                            : 'Development Mode — Only selected users can access VIP features'
+                        );
+
+                        if (d.mode === 'production') {
+                            $('#ihd-users-card').slideUp(200);
+                        } else {
+                            $('#ihd-users-card').slideDown(200);
+                        }
+                    }
+                });
+            });
+
             // Audit Logs
             var currentPage = 1;
 
@@ -463,12 +615,13 @@ class IHD_VIP_Admin {
                     nonce: '{$nonce}',
                     paged: page,
                     filter_reason: $('#ihd-filter-reason').val(),
+                    filter_event_type: $('#ihd-filter-event-type').val(),
                     filter_user: $('#ihd-filter-user').val(),
                     date_from: $('#ihd-filter-date-from').val(),
                     date_to: $('#ihd-filter-date-to').val()
                 };
 
-                $('#ihd-audit-tbody').html('<tr><td colspan="7" class="ihd-audit-loading"><span class="spinner is-active"></span> Loading...</td></tr>');
+                $('#ihd-audit-tbody').html('<tr><td colspan="10" class="ihd-audit-loading"><span class="spinner is-active"></span> Loading...</td></tr>');
 
                 $.get('{$ajax_url}', params, function(resp) {
                     if (resp.success) {
@@ -488,10 +641,8 @@ class IHD_VIP_Admin {
                         // Pagination buttons
                         var btns = '';
                         if (d.total_pages > 1) {
-                            // Prev
                             btns += '<button class="button ihd-page-btn" data-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>&laquo; Prev</button>';
 
-                            // Page numbers
                             var start = Math.max(1, page - 2);
                             var end = Math.min(d.total_pages, page + 2);
 
@@ -509,7 +660,6 @@ class IHD_VIP_Admin {
                                 btns += '<button class="button ihd-page-btn" data-page="' + d.total_pages + '">' + d.total_pages + '</button>';
                             }
 
-                            // Next
                             btns += '<button class="button ihd-page-btn" data-page="' + (page + 1) + '"' + (page >= d.total_pages ? ' disabled' : '') + '>Next &raquo;</button>';
                         }
                         $('#ihd-audit-page-btns').html(btns);
@@ -529,6 +679,7 @@ class IHD_VIP_Admin {
             $('#ihd-filter-apply').on('click', function() { loadAuditLogs(1); });
             $('#ihd-filter-reset').on('click', function() {
                 $('#ihd-filter-reason').val('');
+                $('#ihd-filter-event-type').val('');
                 $('#ihd-filter-user').val('');
                 $('#ihd-filter-date-from').val('');
                 $('#ihd-filter-date-to').val('');
@@ -559,10 +710,29 @@ JS;
         .ihd-mode-badge {
             display: inline-flex; align-items: center; gap: 5px;
             padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 500;
+            transition: all .2s;
         }
         .ihd-mode-badge .dashicons { font-size: 16px; width: 16px; height: 16px; }
         .ihd-mode-dev { background: #fef0ef; color: #d63638; border: 1px solid #f0c0bf; }
         .ihd-mode-prod { background: #edfaef; color: #00a32a; border: 1px solid #b8e6c0; }
+
+        /* Toggle Switch */
+        .ihd-toggle-wrap { display: flex; align-items: center; gap: 14px; }
+        .ihd-toggle { position: relative; display: inline-block; width: 52px; height: 28px; flex-shrink: 0; }
+        .ihd-toggle input { opacity: 0; width: 0; height: 0; }
+        .ihd-toggle-slider {
+            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #c3c4c7; border-radius: 28px; transition: .3s;
+        }
+        .ihd-toggle-slider:before {
+            position: absolute; content: ''; height: 22px; width: 22px;
+            left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: .3s;
+            box-shadow: 0 1px 3px rgba(0,0,0,.15);
+        }
+        .ihd-toggle input:checked + .ihd-toggle-slider { background-color: #00a32a; }
+        .ihd-toggle input:checked + .ihd-toggle-slider:before { transform: translateX(24px); }
+        .ihd-toggle input:focus + .ihd-toggle-slider { box-shadow: 0 0 0 2px rgba(0,163,42,.3); }
+        .ihd-toggle-label { font-size: 13px; color: #50575e; line-height: 1.4; }
 
         /* Stats Row */
         .ihd-stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
@@ -676,20 +846,23 @@ JS;
             color: #1d2327;
         }
         .ihd-audit-table tbody tr:hover { background: #f9fbfd; }
+        .ihd-audit-table tbody tr[title] { cursor: help; }
         .ihd-audit-table .column-id { width: 50px; color: #8c8f94; }
         .ihd-audit-table .column-subscription { width: 100px; }
         .ihd-audit-table .column-subscription a { color: #2271b1; text-decoration: none; font-weight: 500; }
         .ihd-audit-table .column-subscription a:hover { color: #135e96; text-decoration: underline; }
-        .ihd-audit-table .column-user { min-width: 160px; }
-        .ihd-audit-table .column-type { width: 110px; }
-        .ihd-audit-table .column-reason { width: 140px; }
-        .ihd-audit-table .column-feedback { min-width: 180px; max-width: 280px; }
+        .ihd-audit-table .column-user { min-width: 140px; }
+        .ihd-audit-table .column-event { width: 110px; }
+        .ihd-audit-table .column-status { width: 110px; white-space: nowrap; font-size: 12px; color: #50575e; }
+        .ihd-audit-table .column-type { width: 100px; }
+        .ihd-audit-table .column-reason { width: 130px; }
+        .ihd-audit-table .column-payment { min-width: 120px; font-size: 12px; }
+        .ihd-audit-table .column-amount { width: 110px; white-space: nowrap; font-size: 12px; }
         .ihd-audit-table .column-date { width: 120px; white-space: nowrap; }
 
         .ihd-audit-email { color: #646970; font-size: 12px; }
         .ihd-audit-muted { color: #a7aaad; font-size: 12px; }
         .ihd-audit-human-time { font-style: italic; }
-        .ihd-audit-feedback { color: #50575e; font-size: 12px; line-height: 1.5; }
         .ihd-audit-empty, .ihd-audit-loading { text-align: center; padding: 40px 12px !important; color: #646970; }
         .ihd-audit-loading .spinner { float: none; margin: 0 8px 0 0; }
 

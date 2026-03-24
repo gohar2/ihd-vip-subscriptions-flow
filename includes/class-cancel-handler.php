@@ -41,15 +41,38 @@ class IHD_VIP_Cancel_Handler {
             wp_send_json_error( array( 'message' => 'This subscription cannot be cancelled.' ) );
         }
 
-        // Log to audit table (by_user_id = who triggered, intentional = true).
-        IHD_VIP_Audit_Logger::log( $subscription_id, $user_id, true, $reason );
+        // Rate limit: 1 cancellation per subscription per 60 seconds.
+        $rate_key = 'ihd_cancel_rate_' . $subscription_id;
+        if ( get_transient( $rate_key ) ) {
+            wp_send_json_error( array( 'message' => 'Please wait before trying again.' ) );
+        }
+        set_transient( $rate_key, 1, 60 );
+
+        // Log to audit table with full context.
+        $actor_label = $is_owner ? 'customer' : 'admin (user #' . $user_id . ')';
+
+        IHD_VIP_Audit_Logger::log( array(
+            'subscription_id'     => $subscription_id,
+            'customer_id'         => $subscription->get_customer_id(),
+            'by_user_id'          => $user_id,
+            'event_type'          => 'cancellation',
+            'old_status'          => $subscription->get_status(),
+            'new_status'          => 'cancelled',
+            'intentional'         => true,
+            'reason'              => $reason,
+            'detail'              => sprintf( 'Cancelled by %s via VIP portal. Reason: %s', $actor_label, $reason ?: '(none)' ),
+            'payment_method'      => $subscription->get_payment_method_title(),
+            'payment_error_type'  => '',
+            'subscription_amount' => $subscription->get_total(),
+            'billing_period'      => $subscription->get_billing_period(),
+            'currency'            => $subscription->get_currency(),
+        ) );
 
         // Mark this cancellation as handled by our modal so the event tracker skips it.
         $subscription->update_meta_data( '_ihd_cancel_reason', $reason );
         $subscription->update_meta_data( '_ihd_cancel_logged', 'yes' );
         $subscription->save_meta_data();
 
-        $actor_label = $is_owner ? 'customer' : 'admin (user #' . $user_id . ')';
         $status_note = sprintf( 'Cancelled by %s via VIP portal. Reason: %s', $actor_label, $reason ?: '(none)' );
         $subscription->update_status( 'cancelled', $status_note );
 

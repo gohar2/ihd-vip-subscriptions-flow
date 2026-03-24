@@ -49,7 +49,27 @@ class IHD_VIP_Subscription_Event_Tracker {
         'INVALID_RESOURCE_ID',
     );
 
+    /**
+     * Map new_status to a normalised event_type value.
+     */
+    private static $status_event_map = array(
+        'cancelled'      => 'cancellation',
+        'on-hold'        => 'on_hold',
+        'expired'        => 'expiration',
+        'pending-cancel' => 'pending_cancel',
+    );
+
+    /**
+     * Guard against multiple instances registering hooks (e.g., if instantiated in tests).
+     */
+    private static $hooks_registered = false;
+
     public function __construct() {
+        if ( self::$hooks_registered ) {
+            return;
+        }
+        self::$hooks_registered = true;
+
         // Track subscription status changes (cancellation, on-hold, expired).
         add_action( 'woocommerce_subscription_status_updated', array( $this, 'on_status_change' ), 20, 3 );
 
@@ -77,6 +97,19 @@ class IHD_VIP_Subscription_Event_Tracker {
 
         $subscription_id = $subscription->get_id();
 
+        // Skip if the subscription is being deleted (WCS fires cancelled during wp_delete_post).
+        if ( doing_action( 'before_delete_post' ) ) {
+            return;
+        }
+
+        // Dedup: prevent logging the same subscription + status transition twice within 60 seconds.
+        // WCS can fire this hook multiple times for a single logical status change (e.g., cascading saves).
+        $dedup_key = 'ihd_sc_logged_' . $subscription_id . '_' . $old_status . '_' . $new_status;
+        if ( get_transient( $dedup_key ) ) {
+            return;
+        }
+        set_transient( $dedup_key, 1, 60 );
+
         // Skip if already logged by our cancel modal.
         if ( 'cancelled' === $new_status && 'yes' === $subscription->get_meta( '_ihd_cancel_logged' ) ) {
             // Clear the flag so future status changes are tracked.
@@ -87,16 +120,41 @@ class IHD_VIP_Subscription_Event_Tracker {
 
         // Determine the reason and gather context.
         $reason     = $this->determine_status_change_reason( $subscription, $new_status, $old_status );
+        $detail     = $this->build_status_change_detail( $subscription, $new_status, $old_status );
         $by_user_id = get_current_user_id(); // 0 for system/cron, admin ID for admin actions.
+        $event_type = self::$status_event_map[ $new_status ] ?? $new_status;
 
-        IHD_VIP_Audit_Logger::log( $subscription_id, $by_user_id, false, $reason );
+        // Determine payment error type for on-hold/cancel from payment failures.
+        $payment_error_type = '';
+        $last_order = $this->get_last_renewal_order( $subscription );
+        if ( $last_order && 'failed' === $last_order->get_status() ) {
+            $error = $this->get_payment_error_from_order( $last_order );
+            $payment_error_type = self::classify_error( $error );
+        }
+
+        IHD_VIP_Audit_Logger::log( array(
+            'subscription_id'     => $subscription_id,
+            'customer_id'         => $subscription->get_customer_id(),
+            'by_user_id'          => $by_user_id,
+            'event_type'          => $event_type,
+            'old_status'          => $old_status,
+            'new_status'          => $new_status,
+            'intentional'         => false,
+            'reason'              => $reason,
+            'detail'              => $detail,
+            'payment_method'      => $subscription->get_payment_method_title(),
+            'payment_error_type'  => $payment_error_type,
+            'subscription_amount' => $subscription->get_total(),
+            'billing_period'      => $subscription->get_billing_period(),
+            'currency'            => $subscription->get_currency(),
+        ) );
     }
 
     /**
      * Fires when a renewal payment fails.
      *
      * @param WC_Subscription $subscription  The subscription.
-     * @param WC_Order        $renewal_order The failed renewal order.
+     * @param WC_Order|null   $renewal_order The failed renewal order.
      */
     public function on_renewal_payment_failed( $subscription, $renewal_order ) {
         $subscription_id = $subscription->get_id();
@@ -109,21 +167,60 @@ class IHD_VIP_Subscription_Event_Tracker {
         $currency      = $renewal_order ? $renewal_order->get_currency() : 'USD';
 
         // Classify the error.
-        $error_type = $this->classify_error( $error_message );
+        $error_type = self::classify_error( $error_message );
 
-        $reason = 'Renewal Payment Failed';
-        if ( 'integration_error' === $error_type ) {
-            $reason = 'Integration/Gateway Error';
+        // Build a specific reason that includes the error classification.
+        switch ( $error_type ) {
+            case 'integration_error':
+                $reason = 'Integration/Gateway Error';
+                break;
+            case 'insufficient_funds':
+                $reason = 'Renewal Failed (Insufficient Funds)';
+                break;
+            case 'expired_card':
+                $reason = 'Renewal Failed (Expired Card)';
+                break;
+            case 'payment_declined':
+                $reason = 'Renewal Failed (Payment Declined)';
+                break;
+            default:
+                $reason = 'Renewal Payment Failed';
+                break;
         }
 
-        IHD_VIP_Audit_Logger::log( $subscription_id, 0, false, $reason );
+        // Build detail.
+        $detail_lines = array();
+        $detail_lines[] = sprintf( 'Renewal order: #%d (status: %s)', $order_id, $renewal_order ? $renewal_order->get_status() : 'n/a' );
+        $detail_lines[] = sprintf( 'Gateway: %s', $gateway );
+        $detail_lines[] = sprintf( 'Amount: %s %s', $amount, $currency );
+        if ( $error_message ) {
+            $detail_lines[] = sprintf( 'Error: %s', $error_message );
+        }
+        $detail_lines[] = sprintf( 'Error classification: %s', $this->get_error_type_label( $error_type ) );
+
+        IHD_VIP_Audit_Logger::log( array(
+            'subscription_id'     => $subscription_id,
+            'customer_id'         => $subscription->get_customer_id(),
+            'by_user_id'          => 0,
+            'event_type'          => 'payment_failure',
+            'old_status'          => $subscription->get_status(),
+            'new_status'          => $subscription->get_status(),
+            'intentional'         => false,
+            'reason'              => $reason,
+            'detail'              => implode( "\n", $detail_lines ),
+            'payment_method'      => $gateway,
+            'payment_error_type'  => $error_type,
+            'subscription_amount' => $subscription->get_total(),
+            'billing_period'      => $subscription->get_billing_period(),
+            'currency'            => $currency,
+        ) );
     }
 
     /**
      * Alternative hook for payment failures (some gateways use this).
      *
      * @param WC_Subscription $subscription The subscription.
-     * @param WC_Order        $order        The order that failed.
+     * @param WC_Order|null   $order        The order that failed.
      */
     public function on_payment_failed( $subscription, $order ) {
         // Avoid double-logging if renewal_payment_failed already fired.
@@ -158,7 +255,7 @@ class IHD_VIP_Subscription_Event_Tracker {
             $last_order = $this->get_last_renewal_order( $subscription );
             if ( $last_order && $last_order->get_status() === 'failed' ) {
                 $error = $this->get_payment_error_from_order( $last_order );
-                $error_type = $this->classify_error( $error );
+                $error_type = self::classify_error( $error );
                 if ( 'integration_error' === $error_type ) {
                     return 'On-Hold (Integration/Gateway Error)';
                 }
@@ -215,7 +312,7 @@ class IHD_VIP_Subscription_Event_Tracker {
 
             $error = $this->get_payment_error_from_order( $last_order );
             if ( $error ) {
-                $error_type = $this->classify_error( $error );
+                $error_type = self::classify_error( $error );
                 $lines[] = sprintf( 'Payment error: %s', $error );
                 $lines[] = sprintf( 'Error classification: %s', $this->get_error_type_label( $error_type ) );
             }
@@ -298,7 +395,7 @@ class IHD_VIP_Subscription_Event_Tracker {
      *
      * @return string 'integration_error', 'payment_declined', 'insufficient_funds', 'expired_card', or 'unknown'
      */
-    private function classify_error( $error_message ) {
+    public static function classify_error( $error_message ) {
         if ( empty( $error_message ) ) {
             return 'unknown';
         }
