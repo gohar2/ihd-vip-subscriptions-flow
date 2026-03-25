@@ -488,9 +488,11 @@ class IHD_VIP_Admin {
                                 </optgroup>
                             </select>
                         </div>
-                        <div class="ihd-filter-group">
-                            <label for="ihd-filter-user">Customer ID</label>
-                            <input type="number" id="ihd-filter-user" class="ihd-filter-input" placeholder="e.g. 123" min="1">
+                        <div class="ihd-filter-group ihd-filter-group-customer">
+                            <label for="ihd-filter-user">Customer</label>
+                            <select id="ihd-filter-user" class="ihd-filter-customer-select" data-placeholder="Search by name, email, or ID…" style="min-width:240px;">
+                                <option value=""></option>
+                            </select>
                         </div>
                         <div class="ihd-filter-group">
                             <label for="ihd-filter-date-from">From</label>
@@ -567,6 +569,33 @@ class IHD_VIP_Admin {
                 placeholder: 'Search users by name or email…',
                 allowClear: true,
                 width: '100%'
+            });
+
+            // Customer filter Select2 (audit log filter)
+            var $custFilter = $('#ihd-filter-user');
+            $custFilter.select2({
+                ajax: {
+                    url: '{$ajax_url}',
+                    type: 'GET',
+                    dataType: 'json',
+                    delay: 250,
+                    data: function(params) {
+                        return {
+                            action: 'ihd_vip_search_users',
+                            nonce: '{$nonce}',
+                            term: params.term || ''
+                        };
+                    },
+                    processResults: function(data) {
+                        return { results: (data && data.results) ? data.results : [] };
+                    },
+                    cache: true
+                },
+                minimumInputLength: 2,
+                placeholder: $custFilter.data('placeholder') || 'Search customer…',
+                allowClear: true,
+                width: '100%',
+                escapeMarkup: function(m) { return m; }
             });
 
             // Scope Mode Toggle
@@ -680,7 +709,7 @@ class IHD_VIP_Admin {
             $('#ihd-filter-reset').on('click', function() {
                 $('#ihd-filter-reason').val('');
                 $('#ihd-filter-event-type').val('');
-                $('#ihd-filter-user').val('');
+                $('#ihd-filter-user').val(null).trigger('change');
                 $('#ihd-filter-date-from').val('');
                 $('#ihd-filter-date-to').val('');
                 loadAuditLogs(1);
@@ -823,6 +852,25 @@ JS;
             font-size: 13px; min-width: 140px; background: #fff;
         }
         .ihd-filter-select { min-width: 200px; }
+        .ihd-filter-group-customer { min-width: 240px; }
+        .ihd-filter-group-customer .select2-container--default .select2-selection--single {
+            height: 32px !important; border: 1px solid #c3c4c7 !important;
+            border-radius: 4px !important; padding: 2px 8px !important;
+            background: #fff !important; font-size: 13px !important;
+        }
+        .ihd-filter-group-customer .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 28px !important; color: #1d2327 !important; padding-left: 0 !important;
+        }
+        .ihd-filter-group-customer .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 30px !important;
+        }
+        .ihd-filter-group-customer .select2-container--default .select2-selection--single .select2-selection__clear {
+            margin-right: 4px !important; font-size: 16px !important;
+        }
+        .ihd-filter-group-customer .select2-container--default.select2-container--focus .select2-selection--single,
+        .ihd-filter-group-customer .select2-container--default.select2-container--open .select2-selection--single {
+            border-color: #2271b1 !important; box-shadow: 0 0 0 1px #2271b1 !important;
+        }
         .ihd-filter-select:focus, .ihd-filter-input:focus {
             border-color: #2271b1; box-shadow: 0 0 0 1px #2271b1; outline: none;
         }
