@@ -88,6 +88,44 @@ JS;
     /* ── Subscription ID from query param ── */
     $subscription_id = isset( $_GET['subscription'] ) ? absint( $_GET['subscription'] ) : 0;
 
+    /* ── Resolve subscription product & sibling variations dynamically ── */
+    $sub_product_id       = 0;
+    $current_variation_id = 0;
+    $current_billing      = 'monthly';
+    $sibling_variations   = array();
+
+    if ( $subscription_id && function_exists( 'wcs_get_subscription' ) && class_exists( 'IHD_VIP_Switch_Handler' ) ) {
+        $subscription_obj = wcs_get_subscription( $subscription_id );
+        if ( $subscription_obj && (int) $subscription_obj->get_customer_id() === get_current_user_id() ) {
+            // Pull live data from the subscription.
+            $sub_total        = $subscription_obj->get_total();
+            $sub_period       = $subscription_obj->get_billing_period();
+            $current_interval = ucfirst( $sub_period . 'ly' );
+            $current_price    = wc_price( $sub_total );
+            $next_payment     = $subscription_obj->get_date( 'next_payment' );
+            $next_bill        = $next_payment ? date_i18n( 'F j, Y', strtotime( $next_payment ) ) : 'N/A';
+
+            // Find the switchable line item dynamically.
+            $switchable = IHD_VIP_Switch_Handler::get_switchable_item( $subscription_obj );
+            if ( $switchable ) {
+                $sub_product_id       = $switchable['product_id'];
+                $current_variation_id = $switchable['variation_id'];
+                $current_var          = wc_get_product( $current_variation_id );
+
+                if ( $current_var ) {
+                    $current_plan = IHD_VIP_Switch_Handler::get_variation_label( $current_var ) . ' Membership';
+                }
+
+                // Fetch sibling variations matching the same billing period.
+                $sibling_variations = IHD_VIP_Switch_Handler::get_sibling_variations(
+                    $sub_product_id,
+                    $current_variation_id,
+                    $sub_period // 'month' or 'year'
+                );
+            }
+        }
+    }
+
     /* ── Fetch slider posts ── */
     $slider_posts = self::get_slider_posts(
       sanitize_text_field($atts['slider_category']),
@@ -427,6 +465,81 @@ JS;
           color: var(--text);
         }
         #<?php echo esc_attr($uid); ?> .confirm-bar strong { font-weight: 700; }
+
+        /* Current plan card styling */
+        #<?php echo esc_attr($uid); ?> .plan.plan-current {
+          opacity: .65; pointer-events: none; position: relative;
+        }
+        #<?php echo esc_attr($uid); ?> .plan.plan-current .choose {
+          background: #e5e5e5 !important; color: #999 !important; cursor: default;
+        }
+
+        /* === Inline Checkout Popup === */
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-overlay {
+          position: fixed; inset: 0; z-index: 999999;
+          background: rgba(0,0,0,.55); backdrop-filter: blur(2px);
+          display: flex; align-items: center; justify-content: center;
+          padding: 16px;
+        }
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-popup {
+          background: #fff; border-radius: 16px; width: min(680px, 100%);
+          max-height: 92vh; display: flex; flex-direction: column;
+          box-shadow: 0 20px 60px rgba(0,0,0,.25);
+          overflow: hidden;
+        }
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-popup-header {
+          padding: 18px 20px; border-bottom: 1px solid #ebe0db;
+          display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+          position: relative;
+        }
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-popup-title {
+          display: flex; align-items: center; gap: 8px;
+          font-weight: 700; font-size: 16px; color: var(--text);
+        }
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-popup-title svg { color: var(--brand-red); }
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-popup-summary {
+          font-size: 13px; color: var(--muted); margin-left: auto; margin-right: 32px;
+        }
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-popup-close {
+          position: absolute; top: 14px; right: 14px;
+          width: 32px; height: 32px; border-radius: 50%;
+          border: 0; background: #f5f5f4; color: #44403c;
+          font-size: 20px; line-height: 1; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          transition: background .15s;
+        }
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-popup-close:hover { background: #e7e5e4; }
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-popup-body {
+          flex: 1; overflow: hidden; position: relative; min-height: 300px;
+        }
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-iframe {
+          width: 100%; height: 100%; min-height: 500px; border: 0;
+        }
+        #<?php echo esc_attr($uid); ?> .ihd-checkout-loading {
+          position: absolute; inset: 0; display: flex; flex-direction: column;
+          align-items: center; justify-content: center; gap: 12px;
+          color: var(--muted); font-size: 14px; background: #fff;
+        }
+        #<?php echo esc_attr($uid); ?> .ihd-spinner {
+          width: 36px; height: 36px; border: 3px solid #ebe0db;
+          border-top-color: var(--brand-red); border-radius: 50%;
+          animation: ihd-spin .7s linear infinite;
+        }
+        @keyframes ihd-spin { to { transform: rotate(360deg); } }
+
+        /* Switch success message (replaces plan cards after completion) */
+        #<?php echo esc_attr($uid); ?> .switch-success {
+          text-align: center; padding: 40px 20px;
+        }
+        #<?php echo esc_attr($uid); ?> .switch-success .success-icon {
+          width: 56px; height: 56px; border-radius: 50%;
+          background: #dcfce7; color: #16a34a; margin: 0 auto 16px;
+          display: flex; align-items: center; justify-content: center;
+        }
+        #<?php echo esc_attr($uid); ?> .switch-success h3 {
+          font-size: 20px; font-weight: 700; margin-bottom: 8px;
+        }
+        #<?php echo esc_attr($uid); ?> .switch-success p { color: var(--muted); font-size: 14px; }
 
         /* === Pause Section === */
         #<?php echo esc_attr($uid); ?> .bodytext {
@@ -927,71 +1040,97 @@ JS;
 
           <div class="acc-panel">
             <div class="acc-inner">
+              <?php
+              /*
+               * ── Tier benefit descriptions ──
+               * Keyed by the membership-level attribute slug.
+               * Falls back gracefully if a slug has no entry.
+               */
+              $tier_benefits = array(
+                  'hero'       => array( '10% off all purchases', 'Free shipping on orders $25+', '5 meals donated monthly' ),
+                  'super-hero' => array( '15% off all purchases', 'Free shipping on all orders', '15 meals donated monthly', 'Early access to new products' ),
+                  'saint'      => array( '25% off all purchases', 'Free shipping on all orders', '50 meals donated monthly', 'Early access to new products', 'Exclusive VIP-only deals', 'Priority customer support' ),
+              );
+              $tier_icons = array(
+                  'hero'       => '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>',
+                  'super-hero' => '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>',
+                  'saint'      => '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>',
+              );
+              /* CSS class mapping for plan card colour theming */
+              $tier_css = array( 'hero' => 'bronze', 'super-hero' => 'silver', 'saint' => 'gold' );
+              /* Default icon for tiers not in the icon map */
+              $default_icon = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>';
+              $check_svg = '<svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+
+              if ( ! empty( $sibling_variations ) ) : ?>
               <div class="plans" data-plans>
-
-                <!-- Bronze -->
-                <div class="plan bronze" data-plan="Bronze" data-plan-price="$4.99 / Monthly" data-selected="0">
-                  <div class="picon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round">
-                      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>
-                    </svg>
-                  </div>
-                  <div class="pname">Bronze</div>
-                  <div class="price">$4.99 <span class="per">/ Monthly</span></div>
+                <?php foreach ( $sibling_variations as $idx => $sib ) :
+                    $slug        = $sib['slug'];
+                    $css_class   = $tier_css[ $slug ] ?? 'bronze';
+                    $benefits    = $tier_benefits[ $slug ] ?? array();
+                    $icon        = $tier_icons[ $slug ] ?? $default_icon;
+                    $is_current  = $sib['is_current'];
+                    $period_label = ( 'year' === $sib['period'] ) ? 'Annual' : 'Monthly';
+                ?>
+                <div class="plan <?php echo esc_attr( $css_class ); ?><?php echo $is_current ? ' plan-current' : ''; ?>"
+                     data-plan="<?php echo esc_attr( $sib['label'] ); ?>"
+                     data-variation-id="<?php echo esc_attr( $sib['variation_id'] ); ?>"
+                     data-plan-price="$<?php echo esc_attr( $sib['price'] ); ?> / <?php echo esc_attr( $period_label ); ?>"
+                     data-selected="0">
+                  <?php if ( $is_current ) : ?>
+                    <div class="badge" style="background:var(--brand-red);">Current Plan</div>
+                  <?php elseif ( count( $sibling_variations ) > 1 && $idx === (int) floor( count( $sibling_variations ) / 2 ) && ! $sibling_variations[ $idx ]['is_current'] ) : ?>
+                    <div class="badge">Most Popular</div>
+                  <?php endif; ?>
+                  <div class="picon" aria-hidden="true"><?php echo $icon; ?></div>
+                  <div class="pname"><?php echo esc_html( $sib['label'] ); ?></div>
+                  <div class="price">$<?php echo esc_html( number_format( $sib['price'], 2 ) ); ?> <span class="per">/ <?php echo esc_html( $period_label ); ?></span></div>
+                  <?php if ( ! empty( $benefits ) ) : ?>
                   <ul class="ticks">
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>10% off all purchases</li>
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Free shipping on orders $25+</li>
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>5 meals donated monthly</li>
+                    <?php foreach ( $benefits as $b ) : ?>
+                      <li class="tick"><?php echo $check_svg; ?><?php echo esc_html( $b ); ?></li>
+                    <?php endforeach; ?>
                   </ul>
-                  <button class="choose" type="button">Choose Bronze</button>
+                  <?php endif; ?>
+                  <?php if ( $is_current ) : ?>
+                    <button class="choose" type="button" disabled>Current Plan</button>
+                  <?php else : ?>
+                    <button class="choose" type="button">Choose <?php echo esc_html( $sib['label'] ); ?></button>
+                  <?php endif; ?>
                 </div>
-
-                <!-- Silver -->
-                <div class="plan silver" data-plan="Silver" data-plan-price="$9.99 / Monthly" data-selected="0">
-                  <div class="badge">Most Popular</div>
-                  <div class="picon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round">
-                      <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>
-                    </svg>
-                  </div>
-                  <div class="pname">Silver</div>
-                  <div class="price">$9.99 <span class="per">/ Monthly</span></div>
-                  <ul class="ticks">
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>15% off all purchases</li>
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Free shipping on all orders</li>
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>15 meals donated monthly</li>
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Early access to new products</li>
-                  </ul>
-                  <button class="choose" type="button">Choose Silver</button>
-                </div>
-
-                <!-- Gold -->
-                <div class="plan gold" data-plan="Gold" data-plan-price="$24.99 / Monthly" data-selected="0">
-                  <div class="picon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round">
-                      <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/>
-                      <path d="M5 21h14"/>
-                    </svg>
-                  </div>
-                  <div class="pname">Gold</div>
-                  <div class="price">$24.99 <span class="per">/ Monthly</span></div>
-                  <ul class="ticks">
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>25% off all purchases</li>
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Free shipping on all orders</li>
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>50 meals donated monthly</li>
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Early access to new products</li>
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Exclusive VIP-only deals</li>
-                    <li class="tick"><svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Priority customer support</li>
-                  </ul>
-                  <button class="choose" type="button">Choose Gold</button>
-                </div>
-
+                <?php endforeach; ?>
               </div>
+              <?php else : ?>
+              <div class="plans" data-plans>
+                <p style="padding:20px; text-align:center; color:var(--muted);">No switchable plans available. Please contact support.</p>
+              </div>
+              <?php endif; ?>
 
               <!-- Confirm bar (appears when a plan is selected) -->
               <div class="confirm-bar" data-confirm-bar>
-                <p>Ready to switch to <strong data-confirm-name>Silver</strong>?</p>
-                <button type="button" class="btn btn-primary" data-confirm-change>Confirm Change</button>
+                <p>Ready to switch to <strong data-confirm-name>—</strong>?</p>
+                <button type="button" class="btn btn-primary" data-confirm-change>Confirm &amp; Checkout</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ═══ Inline Checkout Popup ═══ -->
+          <div class="ihd-checkout-overlay" data-checkout-overlay style="display:none;">
+            <div class="ihd-checkout-popup">
+              <div class="ihd-checkout-popup-header">
+                <div class="ihd-checkout-popup-title">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>
+                  <span>Complete Your Plan Switch</span>
+                </div>
+                <div class="ihd-checkout-popup-summary" data-checkout-summary></div>
+                <button type="button" class="ihd-checkout-popup-close" data-checkout-close aria-label="Close">&times;</button>
+              </div>
+              <div class="ihd-checkout-popup-body">
+                <div class="ihd-checkout-loading" data-checkout-loading>
+                  <div class="ihd-spinner"></div>
+                  <p>Loading checkout&hellip;</p>
+                </div>
+                <iframe data-checkout-iframe class="ihd-checkout-iframe" style="display:none;" title="Checkout"></iframe>
               </div>
             </div>
           </div>
@@ -1274,29 +1413,175 @@ JS;
           openAccordionByHash();
           window.addEventListener('hashchange', openAccordionByHash);
 
-          /* ── Plan Selection (inline, no modal) ── */
+          /* ── Plan Selection & Inline Checkout ── */
           const plansWrap = root.querySelector('[data-plans]');
           const confirmBar = root.querySelector('[data-confirm-bar]');
           const confirmName = root.querySelector('[data-confirm-name]');
+          const confirmBtn = root.querySelector('[data-confirm-change]');
           let selectedPlan = null;
+          let selectedVariationId = null;
+
+          /* Checkout popup elements */
+          const checkoutOverlay = root.querySelector('[data-checkout-overlay]');
+          const checkoutIframe  = root.querySelector('[data-checkout-iframe]');
+          const checkoutLoading = root.querySelector('[data-checkout-loading]');
+          const checkoutSummary = root.querySelector('[data-checkout-summary]');
+          const checkoutClose   = root.querySelector('[data-checkout-close]');
 
           if (plansWrap) {
             plansWrap.addEventListener('click', (e) => {
               const card = e.target.closest('[data-plan]');
-              if (!card) return;
+              if (!card || card.classList.contains('plan-current')) return;
               const name = card.getAttribute('data-plan');
+              const varId = card.getAttribute('data-variation-id');
               plansWrap.querySelectorAll('[data-plan]').forEach(p => {
-                p.setAttribute('data-selected', p.getAttribute('data-plan') === name ? '1' : '0');
+                if (p.classList.contains('plan-current')) return;
+                const isSel = p.getAttribute('data-plan') === name;
+                p.setAttribute('data-selected', isSel ? '1' : '0');
                 const btn = p.querySelector('.choose');
-                if (btn) btn.textContent = p.getAttribute('data-plan') === name ? 'Selected' : 'Choose ' + p.getAttribute('data-plan');
+                if (btn) btn.textContent = isSel ? 'Selected' : 'Choose ' + p.getAttribute('data-plan');
               });
               selectedPlan = name;
+              selectedVariationId = varId;
               if (confirmBar) {
                 confirmBar.classList.add('show');
                 if (confirmName) confirmName.textContent = name;
               }
             });
           }
+
+          /* ── Confirm Change → Prepare Cart → Open Checkout Popup ── */
+          if (confirmBtn) {
+            confirmBtn.addEventListener('click', () => {
+              if (!selectedVariationId || !cfg.subId) return;
+              confirmBtn.disabled = true;
+              confirmBtn.textContent = 'Preparing\u2026';
+
+              fetch(cfg.ajaxUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                  action: 'ihd_vip_prepare_switch',
+                  nonce: cfg.nonce,
+                  subscription_id: cfg.subId,
+                  variation_id: selectedVariationId,
+                }),
+              })
+                .then(r => r.json())
+                .then(data => {
+                  confirmBtn.disabled = false;
+                  confirmBtn.textContent = 'Confirm & Checkout';
+
+                  if (!data.success) {
+                    alert(data.data && data.data.message ? data.data.message : 'Could not prepare switch.');
+                    return;
+                  }
+
+                  /* Show the checkout popup */
+                  openCheckoutPopup(data.data);
+                })
+                .catch(() => {
+                  confirmBtn.disabled = false;
+                  confirmBtn.textContent = 'Confirm & Checkout';
+                  alert('Network error. Please try again.');
+                });
+            });
+          }
+
+          function openCheckoutPopup(switchData) {
+            if (!checkoutOverlay || !checkoutIframe) return;
+
+            /* Summary line */
+            if (checkoutSummary) {
+              checkoutSummary.innerHTML = 'Switching to <strong>' + switchData.plan_label + '</strong> &mdash; ' + switchData.price + '/' + switchData.period;
+            }
+
+            /* Reset state */
+            checkoutIframe.style.display = 'none';
+            if (checkoutLoading) checkoutLoading.style.display = 'flex';
+            checkoutOverlay.style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+
+            /* Load checkout into iframe via the stripped endpoint */
+            var iframeSrc = cfg.ajaxUrl + '?action=ihd_vip_checkout_page&t=' + Date.now();
+            checkoutIframe.src = iframeSrc;
+
+            checkoutIframe.onload = function() {
+              if (checkoutLoading) checkoutLoading.style.display = 'none';
+              checkoutIframe.style.display = 'block';
+
+              /* Check if the iframe landed on order-received (thank you) page */
+              try {
+                var iframeUrl = checkoutIframe.contentWindow.location.href;
+                if (iframeUrl.indexOf('order-received') !== -1) {
+                  onSwitchComplete(switchData.tier_label);
+                }
+              } catch(e) { /* cross-origin safety */ }
+            };
+          }
+
+          /* Listen for postMessage from the checkout iframe */
+          window.addEventListener('message', function(e) {
+            if (!e.data || e.data.source !== 'ihd_vip_checkout') return;
+            if (e.data.type === 'switch_complete') {
+              onSwitchComplete(selectedPlan || 'your new plan');
+            }
+          });
+
+          function closeCheckoutPopup() {
+            if (checkoutOverlay) checkoutOverlay.style.display = 'none';
+            if (checkoutIframe) { checkoutIframe.src = 'about:blank'; }
+            document.body.style.overflow = '';
+          }
+
+          function onSwitchComplete(planName) {
+            closeCheckoutPopup();
+
+            /* Replace the upgrade accordion content with a success message */
+            var accInner = root.querySelector('[data-acc-id="upgrade-downgrade"] .acc-inner');
+            if (accInner) {
+              accInner.innerHTML =
+                '<div class="switch-success">' +
+                  '<div class="success-icon"><svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg></div>' +
+                  '<h3>Plan Switched Successfully!</h3>' +
+                  '<p>You have been switched to <strong>' + planName + '</strong>. Your new billing will begin on your next renewal date.</p>' +
+                  '<p style="margin-top:16px;"><a href="/my-account/subscriptions/" style="color:var(--brand-red);font-weight:600;text-decoration:none;">View My Subscriptions &rarr;</a></p>' +
+                '</div>';
+            }
+          }
+
+          if (checkoutClose) {
+            checkoutClose.addEventListener('click', closeCheckoutPopup);
+          }
+          if (checkoutOverlay) {
+            checkoutOverlay.addEventListener('click', function(e) {
+              if (e.target === checkoutOverlay) closeCheckoutPopup();
+            });
+          }
+          document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && checkoutOverlay && checkoutOverlay.style.display !== 'none') {
+              closeCheckoutPopup();
+            }
+          });
+
+          /* Fallback: poll for switch completion every 5s while popup is open */
+          var switchPollTimer = null;
+          function startSwitchPoll() {
+            stopSwitchPoll();
+            switchPollTimer = setInterval(function() {
+              if (!checkoutOverlay || checkoutOverlay.style.display === 'none') { stopSwitchPoll(); return; }
+              fetch(cfg.ajaxUrl + '?action=ihd_vip_check_switch_complete&nonce=' + cfg.nonce + '&subscription_id=' + cfg.subId)
+                .then(r => r.json())
+                .then(d => { if (d.success && d.data.switched) onSwitchComplete(selectedPlan || 'your new plan'); });
+            }, 5000);
+          }
+          function stopSwitchPoll() { if (switchPollTimer) { clearInterval(switchPollTimer); switchPollTimer = null; } }
+
+          /* Start polling when popup opens, stop when it closes */
+          var origOpen = openCheckoutPopup;
+          openCheckoutPopup = function(sd) { origOpen(sd); startSwitchPoll(); };
+          var origClose = closeCheckoutPopup;
+          closeCheckoutPopup = function() { stopSwitchPoll(); origClose(); };
 
           /* ── Pause (inline confirm) ── */
           let pauseDays = null;

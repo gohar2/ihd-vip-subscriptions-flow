@@ -73,6 +73,10 @@ function ihd_vip_init_early() {
     require_once IHD_VIP_PATH . 'includes/class-cancel-handler.php';
     new IHD_VIP_Cancel_Handler();
 
+    // ─── Global: Switch handler (AJAX) — inline upgrade/downgrade checkout ───
+    require_once IHD_VIP_PATH . 'includes/class-switch-handler.php';
+    new IHD_VIP_Switch_Handler();
+
     // ─── Global: Event tracker — monitors ALL subscription cancellations & payment failures ───
     // Runs outside the scope gate so it captures events for every subscription, not just VIP users.
     require_once IHD_VIP_PATH . 'includes/class-subscription-event-tracker.php';
