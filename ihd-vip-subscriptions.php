@@ -104,8 +104,8 @@ function ihd_vip_init_frontend() {
     require_once IHD_VIP_PATH . 'shortcodes/manage-subscription-shortcode.php';
     Hero_VIP_Manage_Subscription_Refined_Shortcode::init();
 
-    // Add "Manage My Subscription" tab to My Account menu.
-    add_filter( 'woocommerce_account_menu_items', 'ihd_vip_add_manage_tab' );
+    // Menu tab removed — the page is accessed via JS-intercepted cancel/switch
+    // buttons on the subscription detail page, not via direct navigation.
 
     // Render shortcode content on the endpoint page.
     add_action( 'woocommerce_account_manage-subscription_endpoint', 'ihd_vip_render_manage_page' );
