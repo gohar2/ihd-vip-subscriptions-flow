@@ -1435,6 +1435,7 @@ JS;
           const confirmBtn = root.querySelector('[data-confirm-change]');
           let selectedPlan = null;
           let selectedVariationId = null;
+          let lastSwitchOrderId = 0;
 
           /* Checkout popup elements */
           const checkoutOverlay = root.querySelector('[data-checkout-overlay]');
@@ -1506,9 +1507,19 @@ JS;
           function openCheckoutPopup(switchData) {
             if (!checkoutOverlay || !checkoutIframe) return;
 
+            /* Track the last switch order so polling ignores prior completions */
+            lastSwitchOrderId = switchData.last_switch_order_id || 0;
+
+            /* Descriptive heading based on switch direction */
+            var dirLabel = 'Switch';
+            if (switchData.switch_direction === 'upgrade') dirLabel = 'Upgrade';
+            else if (switchData.switch_direction === 'downgrade') dirLabel = 'Downgrade';
+            var popupTitle = root.querySelector('.ihd-checkout-popup-title span');
+            if (popupTitle) popupTitle.textContent = 'Complete Your Plan ' + dirLabel;
+
             /* Summary line */
             if (checkoutSummary) {
-              checkoutSummary.innerHTML = 'Switching to <strong>' + switchData.plan_label + '</strong> &mdash; ' + switchData.price + '/' + switchData.period;
+              checkoutSummary.innerHTML = dirLabel + ' to <strong>' + switchData.plan_label + '</strong> &mdash; ' + switchData.price + '/' + switchData.period;
             }
 
             /* Reset state */
@@ -1585,7 +1596,7 @@ JS;
             stopSwitchPoll();
             switchPollTimer = setInterval(function() {
               if (!checkoutOverlay || checkoutOverlay.style.display === 'none') { stopSwitchPoll(); return; }
-              fetch(cfg.ajaxUrl + '?action=ihd_vip_check_switch_complete&nonce=' + cfg.nonce + '&subscription_id=' + cfg.subId)
+              fetch(cfg.ajaxUrl + '?action=ihd_vip_check_switch_complete&nonce=' + cfg.nonce + '&subscription_id=' + cfg.subId + '&since_order_id=' + lastSwitchOrderId)
                 .then(r => r.json())
                 .then(d => { if (d.success && d.data.switched) onSwitchComplete(selectedPlan || 'your new plan'); });
             }, 5000);

@@ -111,14 +111,46 @@ final class IHD_VIP_Switch_Handler {
         $period     = get_post_meta( $target_variation_id, '_subscription_period', true );
         $var_name   = self::get_variation_label( $target_variation );
 
+        // Determine switch direction from WCS cart data.
+        $switch_direction = 'switch';
+        foreach ( WC()->cart->get_cart() as $cart_item ) {
+            if ( isset( $cart_item['subscription_switch']['upgraded_or_downgraded'] ) ) {
+                $wcs_dir = $cart_item['subscription_switch']['upgraded_or_downgraded'];
+                if ( 'upgraded' === $wcs_dir ) {
+                    $switch_direction = 'upgrade';
+                } elseif ( 'downgraded' === $wcs_dir ) {
+                    $switch_direction = 'downgrade';
+                } else {
+                    // crossgraded — determine by price comparison.
+                    $current_total = (float) $subscription->get_total();
+                    $target_price  = (float) $target_variation->get_price();
+                    if ( $target_price > $current_total ) {
+                        $switch_direction = 'upgrade';
+                    } elseif ( $target_price < $current_total ) {
+                        $switch_direction = 'downgrade';
+                    } else {
+                        $switch_direction = 'switch';
+                    }
+                }
+                break;
+            }
+        }
+
+        // Record the current highest switch order ID so the polling endpoint
+        // can distinguish a NEW switch completion from a prior one.
+        $existing_switch_orders = $subscription->get_related_orders( 'ids', 'switch' );
+        $last_switch_order_id   = ! empty( $existing_switch_orders ) ? max( $existing_switch_orders ) : 0;
+
         wp_send_json_success( array(
-            'message'       => 'Cart prepared for switch.',
-            'checkout_url'  => wc_get_checkout_url(),
-            'plan_label'    => $var_name,
-            'price'         => wc_price( $target_variation->get_price() ),
-            'period'        => $period ?: 'month',
-            'cart_total'    => wc_price( $cart_total ),
-            'variation_id'  => $target_variation_id,
+            'message'              => 'Cart prepared for switch.',
+            'checkout_url'         => wc_get_checkout_url(),
+            'plan_label'           => $var_name,
+            'price'                => wc_price( $target_variation->get_price() ),
+            'period'               => $period ?: 'month',
+            'cart_total'           => wc_price( $cart_total ),
+            'variation_id'         => $target_variation_id,
+            'switch_direction'     => $switch_direction,
+            'last_switch_order_id' => $last_switch_order_id,
         ) );
     }
 
@@ -136,6 +168,37 @@ final class IHD_VIP_Switch_Handler {
         }
 
         show_admin_bar( false );
+
+        // Override the checkout submit button text via WooCommerce filter.
+        // Determine switch direction from the cart for button label.
+        $switch_direction = 'Switch';
+        foreach ( WC()->cart->get_cart() as $cart_item ) {
+            if ( isset( $cart_item['subscription_switch']['upgraded_or_downgraded'] ) ) {
+                $wcs_dir = $cart_item['subscription_switch']['upgraded_or_downgraded'];
+                if ( 'upgraded' === $wcs_dir ) {
+                    $switch_direction = 'Upgrade';
+                } elseif ( 'downgraded' === $wcs_dir ) {
+                    $switch_direction = 'Downgrade';
+                } else {
+                    // crossgraded — compare prices.
+                    $sub_id = $cart_item['subscription_switch']['subscription_id'] ?? 0;
+                    $sub_obj = $sub_id ? wcs_get_subscription( $sub_id ) : null;
+                    if ( $sub_obj && (float) $cart_item['data']->get_price() < (float) $sub_obj->get_total() ) {
+                        $switch_direction = 'Downgrade';
+                    } else {
+                        $switch_direction = 'Upgrade';
+                    }
+                }
+                break;
+            }
+        }
+        $button_label = $switch_direction . ' Plan Now';
+
+        // Hook into WC's order button text filter at high priority so it
+        // overrides WooCommerce Subscriptions' "Switch subscription" label.
+        add_filter( 'woocommerce_order_button_text', function () use ( $button_label ) {
+            return $button_label;
+        }, 999 );
 
         ob_start();
         ?>
@@ -162,9 +225,11 @@ final class IHD_VIP_Switch_Handler {
         .woocommerce-checkout-review-order-table { font-size: 14px; }
         #place_order {
             background: #C84B31 !important; border-color: #C84B31 !important;
-            color: #fff !important; font-size: 16px !important; padding: 14px !important;
-            border-radius: 8px !important; width: 100% !important;
+            color: #fff !important; font-size: 15px !important; padding: 12px 24px !important;
+            border-radius: 8px !important; width: auto !important; min-width: 200px !important;
+            max-width: 100% !important; margin: 12px auto 0 !important; display: block !important;
             cursor: pointer !important; transition: background .2s !important;
+            font-weight: 600 !important; letter-spacing: .01em !important;
         }
         #place_order:hover { background: #a63d28 !important; }
         .woocommerce-order-received .woocommerce-thankyou-order-received {
@@ -179,6 +244,16 @@ final class IHD_VIP_Switch_Handler {
     <?php wp_footer(); ?>
     <script>
     (function(){
+        /* Rename the submit button — persist through WC checkout AJAX updates */
+        var btnLabel = <?php echo wp_json_encode( $button_label ); ?>;
+        function setBtn() {
+            var b = document.getElementById('place_order');
+            if (b && b.value !== btnLabel) b.value = btnLabel;
+        }
+        setBtn();
+        if (window.jQuery) jQuery(document.body).on('updated_checkout', setBtn);
+        new MutationObserver(setBtn).observe(document.body, { childList: true, subtree: true });
+
         function notifyParent(type, data) {
             if (window.parent && window.parent !== window) {
                 window.parent.postMessage({ source: 'ihd_vip_checkout', type: type, data: data || {} }, '*');
@@ -227,15 +302,24 @@ final class IHD_VIP_Switch_Handler {
             wp_send_json_error();
         }
 
+        // Only consider switch orders created AFTER the one that existed when
+        // the cart was prepared. This prevents the polling from matching a
+        // previous switch order that is still within the time window.
+        $since_order_id = isset( $_GET['since_order_id'] ) ? absint( $_GET['since_order_id'] ) : 0;
+
         $related_orders = $subscription->get_related_orders( 'ids', 'switch' );
         $recent_switch  = false;
 
         if ( ! empty( $related_orders ) ) {
-            $latest_order_id = max( $related_orders );
-            $order           = wc_get_order( $latest_order_id );
-            if ( $order ) {
-                $order_date = $order->get_date_created();
-                if ( $order_date && ( time() - $order_date->getTimestamp() ) < 600 ) {
+            // Filter to only orders newer than the reference point.
+            $new_orders = array_filter( $related_orders, function ( $oid ) use ( $since_order_id ) {
+                return $oid > $since_order_id;
+            } );
+
+            if ( ! empty( $new_orders ) ) {
+                $latest_order_id = max( $new_orders );
+                $order           = wc_get_order( $latest_order_id );
+                if ( $order ) {
                     $status = $order->get_status();
                     if ( in_array( $status, array( 'completed', 'processing' ), true ) ) {
                         $recent_switch = true;
