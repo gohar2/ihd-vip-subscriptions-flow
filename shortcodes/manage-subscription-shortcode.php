@@ -122,6 +122,21 @@ JS;
                     $current_variation_id,
                     $sub_period // 'month' or 'year'
                 );
+
+                // If the product has only 1 variant for the current period (e.g. a
+                // legacy product with just "Monthly"), show the OTHER period's
+                // variants instead so the user can switch monthly↔annual.
+                if ( count( $sibling_variations ) < 2 ) {
+                    $alt_period = ( 'month' === $sub_period ) ? 'year' : 'month';
+                    $alt_variations = IHD_VIP_Switch_Handler::get_sibling_variations(
+                        $sub_product_id,
+                        $current_variation_id,
+                        $alt_period
+                    );
+                    if ( ! empty( $alt_variations ) ) {
+                        $sibling_variations = $alt_variations;
+                    }
+                }
             }
         }
     }
@@ -510,7 +525,7 @@ JS;
         }
         #<?php echo esc_attr($uid); ?> .ihd-checkout-popup-close:hover { background: #e7e5e4; }
         #<?php echo esc_attr($uid); ?> .ihd-checkout-popup-body {
-          flex: 1; overflow: hidden; position: relative; min-height: 300px;
+          flex: 1; overflow: hidden; position: relative; min-height: 300px; padding: 25px;
         }
         #<?php echo esc_attr($uid); ?> .ihd-checkout-iframe {
           width: 100%; height: 100%; min-height: 500px; border: 0;

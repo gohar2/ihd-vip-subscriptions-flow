@@ -18,6 +18,7 @@ define( 'IHD_VIP_PATH', plugin_dir_path( __FILE__ ) );
 define( 'IHD_VIP_URL', plugin_dir_url( __FILE__ ) );
 define( 'IHD_VIP_BASENAME', plugin_basename( __FILE__ ) );
 
+
 /**
  * Require class files.
  */

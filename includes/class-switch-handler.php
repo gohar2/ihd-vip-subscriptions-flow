@@ -71,10 +71,6 @@ final class IHD_VIP_Switch_Handler {
             wp_send_json_error( array( 'message' => 'Target variation does not belong to the same product.' ) );
         }
 
-        if ( ! $target_variation->is_purchasable() ) {
-            wp_send_json_error( array( 'message' => 'Target variation is not available for purchase.' ) );
-        }
-
         // Prevent switching to the same variation.
         if ( $target_variation_id === $current_variation_id ) {
             wp_send_json_error( array( 'message' => 'You are already on this plan.' ) );
@@ -296,16 +292,28 @@ final class IHD_VIP_Switch_Handler {
      */
     public static function get_sibling_variations( $parent_product_id, $current_variation_id = 0, $match_period = '' ) {
         $parent = wc_get_product( $parent_product_id );
-        if ( ! $parent || ! method_exists( $parent, 'get_available_variations' ) ) {
+        if ( ! $parent || ! $parent->is_type( 'variable-subscription' ) ) {
             return array();
         }
 
         $siblings = array();
 
-        foreach ( $parent->get_available_variations() as $v ) {
-            $var_id    = (int) $v['variation_id'];
+        // Use get_children() instead of get_available_variations() to bypass
+        // WCS_Limiter purchasability checks. When a subscription product has the
+        // "limit: one active subscription" setting, WCS marks all variations as
+        // non-purchasable for users who already own a subscription — which is every
+        // user viewing this shortcode. We only need the variations for display;
+        // actual switch purchasability is validated in handle_prepare_switch().
+        $child_ids = $parent->get_children();
+
+        foreach ( $child_ids as $var_id ) {
             $variation = wc_get_product( $var_id );
-            if ( ! $variation || ! $variation->is_purchasable() ) {
+            if ( ! $variation || 'publish' !== get_post_status( $var_id ) ) {
+                continue;
+            }
+
+            // Skip variations without a price.
+            if ( '' === $variation->get_price() ) {
                 continue;
             }
 
@@ -324,7 +332,7 @@ final class IHD_VIP_Switch_Handler {
                 'price'        => (float) $variation->get_price(),
                 'period'       => $period ?: 'month',
                 'interval'     => $interval ?: '1',
-                'attributes'   => $v['attributes'],
+                'attributes'   => $variation->get_variation_attributes(),
                 'is_current'   => ( $var_id === (int) $current_variation_id ),
             );
         }

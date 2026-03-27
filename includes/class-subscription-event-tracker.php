@@ -348,7 +348,7 @@ class IHD_VIP_Subscription_Event_Tracker {
         $error_keywords = array(
             'failed', 'declined', 'error', 'rejected', 'denied',
             'refused', 'invalid', 'unable', 'could not', 'unsuccessful',
-            'expired card', 'insufficient', 'do not honor',
+            'expired card', 'expired', 'insufficient', 'do not honor',
             'INVALID_CARD_DATA', 'CARD_DECLINED', 'INSTRUMENT_DECLINED',
         );
 

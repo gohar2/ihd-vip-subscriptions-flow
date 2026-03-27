@@ -37,7 +37,11 @@ class IHD_VIP_Admin {
         wp_enqueue_style( 'select2', WC()->plugin_url() . '/assets/css/select2.css', array(), WC_VERSION );
         wp_enqueue_script( 'select2', WC()->plugin_url() . '/assets/js/select2/select2.full.min.js', array( 'jquery' ), WC_VERSION, true );
 
-        wp_add_inline_script( 'select2', $this->get_inline_js() );
+        // Register our own handle so we don't share the select2 inline block
+        // with other plugins (a syntax error in their code would kill ours).
+        wp_register_script( 'ihd-vip-admin', '', array( 'jquery', 'select2' ), IHD_VIP_VERSION, true );
+        wp_enqueue_script( 'ihd-vip-admin' );
+        wp_add_inline_script( 'ihd-vip-admin', $this->get_inline_js() );
         wp_add_inline_style( 'select2', $this->get_inline_css() );
     }
 
