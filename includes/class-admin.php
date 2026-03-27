@@ -37,13 +37,14 @@ class IHD_VIP_Admin {
         wp_enqueue_style( 'select2', WC()->plugin_url() . '/assets/css/select2.css', array(), WC_VERSION );
         wp_enqueue_script( 'select2', WC()->plugin_url() . '/assets/js/select2/select2.full.min.js', array( 'jquery' ), WC_VERSION, true );
 
-        // Register our own handle so we don't share the select2 inline block
-        // with other plugins (a syntax error in their code would kill ours).
-        // Use false as src so WordPress outputs the inline script without needing a file.
-        wp_register_script( 'ihd-vip-admin', false, array( 'jquery', 'select2' ), IHD_VIP_VERSION, true );
-        wp_enqueue_script( 'ihd-vip-admin' );
-        wp_add_inline_script( 'ihd-vip-admin', $this->get_inline_js() );
         wp_add_inline_style( 'select2', $this->get_inline_css() );
+
+        // Print JS in footer after jQuery and Select2 are loaded.
+        add_action( 'admin_footer', array( $this, 'print_inline_js' ) );
+    }
+
+    public function print_inline_js() {
+        echo '<script>' . $this->get_inline_js() . '</script>';
     }
 
     public function ajax_search_users() {
@@ -577,8 +578,8 @@ class IHD_VIP_Admin {
             });
 
             // Customer filter Select2 (audit log filter)
-            var $custFilter = $('#ihd-filter-user');
-            $custFilter.select2({
+            var custFilter = $('#ihd-filter-user');
+            custFilter.select2({
                 ajax: {
                     url: '{$ajax_url}',
                     type: 'GET',
@@ -597,7 +598,7 @@ class IHD_VIP_Admin {
                     cache: true
                 },
                 minimumInputLength: 2,
-                placeholder: $custFilter.data('placeholder') || 'Search customer…',
+                placeholder: custFilter.data('placeholder') || 'Search customer…',
                 allowClear: true,
                 width: '100%',
                 escapeMarkup: function(m) { return m; }
