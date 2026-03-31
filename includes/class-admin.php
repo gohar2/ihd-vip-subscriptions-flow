@@ -406,8 +406,11 @@ class IHD_VIP_Admin {
                 </div>
             </div>
 
+            <!-- Allowed Users + Blog Slider Row -->
+            <div class="ihd-settings-row" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start;">
+
             <!-- Allowed Users Card -->
-            <div class="ihd-card" id="ihd-users-card" style="<?php echo $is_dev_mode ? '' : 'display:none;'; ?>">
+            <div class="ihd-card" id="ihd-users-card" style="<?php echo $is_dev_mode ? '' : 'display:none;'; ?>margin-bottom:0;">
                 <div class="ihd-card-header">
                     <h2><span class="dashicons dashicons-admin-users"></span> Allowed Users</h2>
                 </div>
@@ -454,7 +457,7 @@ class IHD_VIP_Admin {
             </div>
 
             <!-- Blog Slider Settings Card -->
-            <div class="ihd-card">
+            <div class="ihd-card" style="margin-bottom:0;">
                 <div class="ihd-card-header">
                     <h2><span class="dashicons dashicons-images-alt2"></span> Blog Slider Settings</h2>
                 </div>
@@ -473,7 +476,7 @@ class IHD_VIP_Admin {
                         }
                         ?>
 
-                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:600px;">
+                        <div style="display:grid; grid-template-columns:1fr; gap:16px;">
                             <div>
                                 <label for="ihd_vip_slider_category" style="display:block; font-weight:600; font-size:13px; margin-bottom:6px;">Post Category</label>
                                 <?php
@@ -506,6 +509,8 @@ class IHD_VIP_Admin {
                     </form>
                 </div>
             </div>
+
+            </div><!-- /.ihd-settings-row -->
 
             <!-- Audit Logs Card -->
             <div class="ihd-card ihd-card-audit">
