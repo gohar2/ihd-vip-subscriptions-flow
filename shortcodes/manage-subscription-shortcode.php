@@ -71,13 +71,18 @@ JS;
     static $instance = 0; $instance++;
     $uid = 'ifx-hvp-' . $instance;
 
+    // Pull slider defaults from admin settings.
+    $slider_settings   = get_option( 'ihd_vip_slider_settings', array() );
+    $default_slider_cat   = ! empty( $slider_settings['category'] ) ? (string) $slider_settings['category'] : '';
+    $default_slider_count = ! empty( $slider_settings['count'] ) ? (string) $slider_settings['count'] : '4';
+
     $atts = shortcode_atts([
       'current_plan'     => 'Silver Membership',
       'current_price'    => '$9.99',
       'current_interval' => 'Monthly',
       'next_bill'        => 'March 15, 2026',
-      'slider_category'  => '',
-      'slider_count'     => '4',
+      'slider_category'  => $default_slider_cat,
+      'slider_count'     => $default_slider_count,
     ], $atts, $shortcode_tag);
 
     $current_plan     = esc_html($atts['current_plan']);

@@ -5,9 +5,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class IHD_VIP_Admin {
 
-    const OPTION_KEY = 'ihd_vip_scoped_users';
-    const NONCE_ACTION = 'ihd_vip_admin_save';
-    const PER_PAGE = 15;
+    const OPTION_KEY        = 'ihd_vip_scoped_users';
+    const SLIDER_OPTION_KEY = 'ihd_vip_slider_settings';
+    const NONCE_ACTION      = 'ihd_vip_admin_save';
+    const PER_PAGE          = 15;
 
     public function __construct() {
         add_action( 'admin_menu', array( $this, 'add_menu_page' ) );
@@ -315,6 +316,13 @@ class IHD_VIP_Admin {
 
         update_option( self::OPTION_KEY, $user_ids );
 
+        // Blog slider settings.
+        $slider_settings = array(
+            'category' => isset( $_POST['ihd_vip_slider_category'] ) ? absint( $_POST['ihd_vip_slider_category'] ) : 0,
+            'count'    => isset( $_POST['ihd_vip_slider_count'] ) ? max( 1, min( 20, absint( $_POST['ihd_vip_slider_count'] ) ) ) : 4,
+        );
+        update_option( self::SLIDER_OPTION_KEY, $slider_settings );
+
         wp_safe_redirect( add_query_arg(
             array(
                 'page'  => 'ihd-vip-subscriptions',
@@ -326,8 +334,11 @@ class IHD_VIP_Admin {
     }
 
     public function render_settings_page() {
-        $saved_users = get_option( self::OPTION_KEY, array() );
-        $is_dev_mode = IHD_VIP_User_Scope_Gate::is_development_mode();
+        $saved_users     = get_option( self::OPTION_KEY, array() );
+        $slider_settings = get_option( self::SLIDER_OPTION_KEY, array( 'category' => 0, 'count' => 4 ) );
+        $slider_cat      = absint( $slider_settings['category'] ?? 0 );
+        $slider_count    = absint( $slider_settings['count'] ?? 4 ) ?: 4;
+        $is_dev_mode     = IHD_VIP_User_Scope_Gate::is_development_mode();
         $user_count  = count( $saved_users );
         ?>
         <div class="wrap ihd-vip-wrap">
@@ -437,6 +448,60 @@ class IHD_VIP_Admin {
 
                         <div class="ihd-card-footer">
                             <?php submit_button( 'Save Settings', 'primary ihd-save-btn', 'submit', false ); ?>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Blog Slider Settings Card -->
+            <div class="ihd-card">
+                <div class="ihd-card-header">
+                    <h2><span class="dashicons dashicons-images-alt2"></span> Blog Slider Settings</h2>
+                </div>
+                <div class="ihd-card-body">
+                    <p class="ihd-card-desc">Configure the blog post slider shown on the manage subscription page. Select a category and set the number of posts to display.</p>
+
+                    <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+                        <input type="hidden" name="action" value="ihd_vip_save_settings">
+                        <?php wp_nonce_field( self::NONCE_ACTION, 'ihd_vip_nonce' ); ?>
+                        <?php
+                        // Carry over the current user IDs so they don't get wiped.
+                        if ( ! empty( $saved_users ) ) {
+                            foreach ( $saved_users as $uid ) {
+                                printf( '<input type="hidden" name="ihd_vip_users[]" value="%d">', absint( $uid ) );
+                            }
+                        }
+                        ?>
+
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; max-width:600px;">
+                            <div>
+                                <label for="ihd_vip_slider_category" style="display:block; font-weight:600; font-size:13px; margin-bottom:6px;">Post Category</label>
+                                <?php
+                                wp_dropdown_categories( array(
+                                    'id'               => 'ihd_vip_slider_category',
+                                    'name'             => 'ihd_vip_slider_category',
+                                    'selected'         => $slider_cat,
+                                    'show_option_none' => '— Random (no filter) —',
+                                    'option_none_value' => '0',
+                                    'orderby'          => 'name',
+                                    'hide_empty'       => false,
+                                    'class'            => 'widefat',
+                                ) );
+                                ?>
+                                <p class="ihd-select-hint">Posts from this category will appear in the slider.</p>
+                            </div>
+                            <div>
+                                <label for="ihd_vip_slider_count" style="display:block; font-weight:600; font-size:13px; margin-bottom:6px;">Number of Slides</label>
+                                <input type="number" id="ihd_vip_slider_count" name="ihd_vip_slider_count"
+                                       value="<?php echo esc_attr( $slider_count ); ?>"
+                                       min="1" max="20" step="1"
+                                       style="width:100%; padding:6px 10px; border:1px solid #8c8f94; border-radius:4px;">
+                                <p class="ihd-select-hint">How many blog posts to show (1–20).</p>
+                            </div>
+                        </div>
+
+                        <div class="ihd-card-footer">
+                            <?php submit_button( 'Save Slider Settings', 'primary ihd-save-btn', 'submit', false ); ?>
                         </div>
                     </form>
                 </div>
