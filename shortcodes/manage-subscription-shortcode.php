@@ -88,14 +88,40 @@ JS;
     /* ── Subscription ID from query param ── */
     $subscription_id = isset( $_GET['subscription'] ) ? absint( $_GET['subscription'] ) : 0;
 
+    /* ── Page guard: require a valid, active (or on-hold) subscription ── */
+    $subscription_obj = null;
+    $is_valid_sub     = false;
+
+    if ( $subscription_id && function_exists( 'wcs_get_subscription' ) ) {
+        $subscription_obj = wcs_get_subscription( $subscription_id );
+        if ( $subscription_obj && (int) $subscription_obj->get_customer_id() === get_current_user_id() ) {
+            $sub_status   = $subscription_obj->get_status();
+            $is_valid_sub = in_array( $sub_status, array( 'active', 'on-hold' ), true );
+        }
+    }
+
+    if ( ! $is_valid_sub ) {
+        return '<div style="text-align:center;padding:40px 20px;">'
+            . '<p style="font-size:16px;color:#6b6b6b;">No active subscription found.</p>'
+            . '<p style="margin-top:12px;"><a href="/my-account/subscriptions/" style="color:#C84B31;font-weight:600;text-decoration:none;">← Back to My Subscriptions</a></p>'
+            . '</div>';
+    }
+
+    /* ── Pause state detection ── */
+    $is_paused     = false;
+    $pause_details = false;
+    if ( class_exists( 'IHD_VIP_Pause_Handler' ) ) {
+        $is_paused     = IHD_VIP_Pause_Handler::is_vip_paused( $subscription_obj );
+        $pause_details = IHD_VIP_Pause_Handler::get_pause_details( $subscription_obj );
+    }
+
     /* ── Resolve subscription product & sibling variations dynamically ── */
     $sub_product_id       = 0;
     $current_variation_id = 0;
     $current_billing      = 'monthly';
     $sibling_variations   = array();
 
-    if ( $subscription_id && function_exists( 'wcs_get_subscription' ) && class_exists( 'IHD_VIP_Switch_Handler' ) ) {
-        $subscription_obj = wcs_get_subscription( $subscription_id );
+    if ( $subscription_id && class_exists( 'IHD_VIP_Switch_Handler' ) ) {
         if ( $subscription_obj && (int) $subscription_obj->get_customer_id() === get_current_user_id() ) {
             // Pull live data from the subscription.
             $sub_total        = $subscription_obj->get_total();
@@ -1152,17 +1178,28 @@ JS;
         </section>
 
         <!-- ═══ Accordion: Pause ═══ -->
-        <section class="section" data-acc data-acc-id="pause" data-open="0">
-          <button class="acc-h" type="button" data-acc-toggle aria-expanded="false">
+        <section class="section" data-acc data-acc-id="pause" data-open="<?php echo $is_paused ? '1' : '0'; ?>">
+          <button class="acc-h" type="button" data-acc-toggle aria-expanded="<?php echo $is_paused ? 'true' : 'false'; ?>">
             <div class="acc-left">
               <div class="acc-ico ico-pause" aria-hidden="true">
+                <?php if ( $is_paused ) : ?>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="6 3 20 12 6 21 6 3"/>
+                </svg>
+                <?php else : ?>
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/>
                 </svg>
+                <?php endif; ?>
               </div>
               <div>
+                <?php if ( $is_paused ) : ?>
+                <h2 class="acc-title">Resume My Membership</h2>
+                <div class="acc-sub">Your membership is currently paused</div>
+                <?php else : ?>
                 <h2 class="acc-title">Pause My Membership</h2>
                 <div class="acc-sub">Take a break</div>
+                <?php endif; ?>
               </div>
             </div>
             <svg class="chev" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1172,7 +1209,61 @@ JS;
 
           <div class="acc-panel">
             <div class="acc-inner">
-              <!-- Pause form -->
+
+              <?php if ( $is_paused && $pause_details ) : ?>
+              <!-- Resume UI (subscription is currently paused) -->
+              <div data-resume-section>
+                <div class="pause-status-card" style="background:var(--warn-bg); border:1px solid var(--warn-border); border-radius:var(--radius); padding:20px; margin-bottom:16px;">
+                  <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--warn-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/>
+                    </svg>
+                    <strong style="color:var(--warn-text); font-size:15px;">Membership Paused</strong>
+                  </div>
+                  <p style="color:var(--warn-text); font-size:14px; margin:0;">
+                    Your membership has been paused for <?php echo esc_html( $pause_details['days'] ); ?> days.
+                    <?php if ( $pause_details['days_remaining'] > 0 ) : ?>
+                      It will automatically resume on <strong><?php echo esc_html( $pause_details['resume_date_nice'] ); ?></strong>
+                      (<?php echo esc_html( $pause_details['days_remaining'] ); ?> days remaining).
+                    <?php else : ?>
+                      It is scheduled to resume shortly.
+                    <?php endif; ?>
+                  </p>
+                </div>
+                <p class="bodytext">Ready to come back? Resume your membership now and your benefits will be restored immediately.</p>
+                <button type="button" class="btn btn-primary" data-resume-btn style="min-width:180px;">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:6px;">
+                    <polygon points="6 3 20 12 6 21 6 3"/>
+                  </svg>
+                  Resume Membership
+                </button>
+              </div>
+
+              <!-- Resume confirmation overlay -->
+              <div data-resume-confirm-overlay style="display:none; margin-top:16px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:24px; text-align:center;">
+                <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="var(--brand-red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px;">
+                  <polygon points="6 3 20 12 6 21 6 3"/>
+                </svg>
+                <h3 style="font-size:18px; font-weight:700; margin-bottom:6px;">Resume Your Membership?</h3>
+                <p style="color:var(--muted); font-size:14px; margin-bottom:20px;">Your membership will be reactivated immediately. Billing will resume on your next renewal date.</p>
+                <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+                  <button type="button" class="btn btn-primary" data-resume-confirm-yes style="min-width:160px;">Yes, Resume Now</button>
+                  <button type="button" class="btn" data-resume-confirm-no style="min-width:120px; background:var(--accent-bg); color:var(--text); border:1px solid var(--border);">Not Yet</button>
+                </div>
+              </div>
+
+              <!-- Resume success -->
+              <div class="pause-success" data-resume-success>
+                <svg class="sico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+                <h3>Welcome Back!</h3>
+                <p>Your membership has been resumed. Your benefits are now active again.</p>
+                <p style="margin-top:12px;"><a href="/my-account/subscriptions/" style="color:var(--brand-red);font-weight:600;text-decoration:none;">View My Subscriptions →</a></p>
+              </div>
+
+              <?php else : ?>
+              <!-- Pause form (subscription is active) -->
               <div data-pause-form>
                 <p class="bodytext">
                   Select how long you'd like to pause your membership. Your benefits will resume automatically after the pause period ends.
@@ -1199,7 +1290,10 @@ JS;
                 </svg>
                 <h3>Membership Paused</h3>
                 <p>Your membership has been paused for <span data-pause-days-done>30</span> days. We'll be here when you're ready to come back!</p>
+                <p style="margin-top:12px;"><a href="/my-account/subscriptions/" style="color:var(--brand-red);font-weight:600;text-decoration:none;">View My Subscriptions →</a></p>
               </div>
+              <?php endif; ?>
+
             </div>
           </div>
         </section>
@@ -1609,7 +1703,7 @@ JS;
           var origClose = closeCheckoutPopup;
           closeCheckoutPopup = function() { stopSwitchPoll(); origClose(); };
 
-          /* ── Pause (inline confirm) ── */
+          /* ── Pause (inline confirm + AJAX) ── */
           let pauseDays = null;
           const pauseGrid = root.querySelector('[data-pause-grid]');
           const pauseInfo = root.querySelector('[data-pause-info]');
@@ -1634,9 +1728,96 @@ JS;
 
           if (pauseConfirmBtn) {
             pauseConfirmBtn.addEventListener('click', () => {
-              if (pauseDaysDone) pauseDaysDone.textContent = pauseDays;
-              if (pauseForm) pauseForm.style.display = 'none';
-              if (pauseSuccess) pauseSuccess.classList.add('show');
+              if (!pauseDays || !cfg.subId) return;
+              pauseConfirmBtn.disabled = true;
+              pauseConfirmBtn.textContent = 'Pausing\u2026';
+
+              fetch(cfg.ajaxUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                  action: 'ihd_vip_pause_subscription',
+                  nonce: cfg.nonce,
+                  subscription_id: cfg.subId,
+                  days: pauseDays,
+                }),
+              })
+                .then(r => r.json())
+                .then(data => {
+                  if (data.success) {
+                    if (pauseDaysDone) pauseDaysDone.textContent = pauseDays;
+                    if (pauseForm) pauseForm.style.display = 'none';
+                    if (pauseSuccess) pauseSuccess.classList.add('show');
+                    /* Hide other sections */
+                    root.querySelectorAll('[data-acc-id="upgrade-downgrade"], [data-acc-id="cancel"]').forEach(function(s) { s.style.display = 'none'; });
+                  } else {
+                    pauseConfirmBtn.disabled = false;
+                    pauseConfirmBtn.textContent = 'Confirm Pause';
+                    alert(data.data && data.data.message ? data.data.message : 'Could not pause. Please try again.');
+                  }
+                })
+                .catch(() => {
+                  pauseConfirmBtn.disabled = false;
+                  pauseConfirmBtn.textContent = 'Confirm Pause';
+                  alert('Network error. Please try again.');
+                });
+            });
+          }
+
+          /* ── Resume (confirmation + AJAX) ── */
+          const resumeBtn = root.querySelector('[data-resume-btn]');
+          const resumeOverlay = root.querySelector('[data-resume-confirm-overlay]');
+          const resumeSection = root.querySelector('[data-resume-section]');
+          const resumeYes = root.querySelector('[data-resume-confirm-yes]');
+          const resumeNo = root.querySelector('[data-resume-confirm-no]');
+          const resumeSuccess = root.querySelector('[data-resume-success]');
+
+          if (resumeBtn && resumeOverlay) {
+            resumeBtn.addEventListener('click', () => {
+              resumeBtn.style.display = 'none';
+              resumeOverlay.style.display = 'block';
+            });
+          }
+
+          if (resumeNo && resumeOverlay && resumeBtn) {
+            resumeNo.addEventListener('click', () => {
+              resumeOverlay.style.display = 'none';
+              resumeBtn.style.display = '';
+            });
+          }
+
+          if (resumeYes) {
+            resumeYes.addEventListener('click', () => {
+              if (!cfg.subId) return;
+              resumeYes.disabled = true;
+              resumeYes.textContent = 'Resuming\u2026';
+
+              fetch(cfg.ajaxUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                  action: 'ihd_vip_resume_subscription',
+                  nonce: cfg.nonce,
+                  subscription_id: cfg.subId,
+                }),
+              })
+                .then(r => r.json())
+                .then(data => {
+                  if (data.success) {
+                    if (resumeSection) resumeSection.style.display = 'none';
+                    if (resumeOverlay) resumeOverlay.style.display = 'none';
+                    if (resumeSuccess) resumeSuccess.classList.add('show');
+                  } else {
+                    resumeYes.disabled = false;
+                    resumeYes.textContent = 'Yes, Resume Now';
+                    alert(data.data && data.data.message ? data.data.message : 'Could not resume. Please try again.');
+                  }
+                })
+                .catch(() => {
+                  resumeYes.disabled = false;
+                  resumeYes.textContent = 'Yes, Resume Now';
+                  alert('Network error. Please try again.');
+                });
             });
           }
 

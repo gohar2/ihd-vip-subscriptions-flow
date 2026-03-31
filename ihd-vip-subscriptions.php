@@ -78,6 +78,10 @@ function ihd_vip_init_early() {
     require_once IHD_VIP_PATH . 'includes/class-switch-handler.php';
     new IHD_VIP_Switch_Handler();
 
+    // ─── Global: Pause handler (AJAX) — pause/resume + auto-resume cron ───
+    require_once IHD_VIP_PATH . 'includes/class-pause-handler.php';
+    new IHD_VIP_Pause_Handler();
+
     // ─── Global: Event tracker — monitors ALL subscription cancellations & payment failures ───
     // Runs outside the scope gate so it captures events for every subscription, not just VIP users.
     require_once IHD_VIP_PATH . 'includes/class-subscription-event-tracker.php';
