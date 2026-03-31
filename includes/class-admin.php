@@ -407,10 +407,10 @@ class IHD_VIP_Admin {
             </div>
 
             <!-- Allowed Users + Blog Slider Row -->
-            <div class="ihd-settings-row" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start;">
+            <div class="ihd-settings-row" style="display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:stretch; margin-bottom:24px;">
 
             <!-- Allowed Users Card -->
-            <div class="ihd-card" id="ihd-users-card" style="<?php echo $is_dev_mode ? '' : 'display:none;'; ?>margin-bottom:0;">
+            <div class="ihd-card" id="ihd-users-card" style="<?php echo $is_dev_mode ? '' : 'display:none;'; ?>margin-bottom:0; display:flex; flex-direction:column;">
                 <div class="ihd-card-header">
                     <h2><span class="dashicons dashicons-admin-users"></span> Allowed Users</h2>
                 </div>
@@ -457,7 +457,7 @@ class IHD_VIP_Admin {
             </div>
 
             <!-- Blog Slider Settings Card -->
-            <div class="ihd-card" style="margin-bottom:0;">
+            <div class="ihd-card" style="margin-bottom:0; display:flex; flex-direction:column;">
                 <div class="ihd-card-header">
                     <h2><span class="dashicons dashicons-images-alt2"></span> Blog Slider Settings</h2>
                 </div>

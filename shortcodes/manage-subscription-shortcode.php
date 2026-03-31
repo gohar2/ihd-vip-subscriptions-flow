@@ -1064,8 +1064,10 @@ JS;
           </div>
         </div>
 
+        <div class="ihd-acc-sections" style="display:flex; flex-direction:column;">
+
         <!-- ═══ Accordion: Upgrade/Downgrade ═══ -->
-        <section class="section" data-acc data-acc-id="upgrade-downgrade" data-open="0">
+        <section class="section" style="order:1;" data-acc data-acc-id="upgrade-downgrade" data-open="0">
           <button class="acc-h" type="button" data-acc-toggle aria-expanded="false">
             <div class="acc-left">
               <div class="acc-ico ico-upgrade" aria-hidden="true">
@@ -1183,7 +1185,7 @@ JS;
         </section>
 
         <!-- ═══ Accordion: Pause ═══ -->
-        <section class="section" data-acc data-acc-id="pause" data-open="<?php echo $is_paused ? '1' : '0'; ?>">
+        <section class="section" style="order:<?php echo $is_paused ? '0' : '2'; ?>;" data-acc data-acc-id="pause" data-open="<?php echo $is_paused ? '1' : '0'; ?>">
           <button class="acc-h" type="button" data-acc-toggle aria-expanded="<?php echo $is_paused ? 'true' : 'false'; ?>">
             <div class="acc-left">
               <div class="acc-ico ico-pause" aria-hidden="true">
@@ -1304,7 +1306,7 @@ JS;
         </section>
 
         <!-- ═══ Accordion: Cancel — inline multi-step ═══ -->
-        <section class="section" data-acc data-acc-id="cancel" data-open="0" data-cancel-section>
+        <section class="section" style="order:3;" data-acc data-acc-id="cancel" data-open="0" data-cancel-section>
           <button class="acc-h" type="button" data-acc-toggle aria-expanded="false">
             <div class="acc-left">
               <div class="acc-ico ico-cancel" aria-hidden="true">
@@ -1404,6 +1406,8 @@ JS;
             </div>
           </div>
         </section>
+
+        </div><!-- /.ihd-acc-sections -->
 
         <!-- Blog Post Slider -->
         <?php if ( ! empty( $slider_posts ) ) : $placeholder = self::get_placeholder_image(); ?>
