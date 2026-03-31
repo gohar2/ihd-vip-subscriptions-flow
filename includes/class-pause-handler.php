@@ -4,7 +4,12 @@
  *
  * Handles subscription pause (on-hold) and resume via AJAX.
  * Stores pause metadata on the subscription so the shortcode can display
- * the correct UI and auto-resume is scheduled via WP Cron.
+ * the correct UI.
+ *
+ * Auto-resume: The CRON_HOOK action should be scheduled externally (e.g. via
+ * Action Scheduler in WP Admin) as a daily recurring event. The callback
+ * queries all VIP-paused subscriptions whose resume date has passed and
+ * reactivates them in batch.
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -22,7 +27,10 @@ final class IHD_VIP_Pause_Handler {
     public function __construct() {
         add_action( 'wp_ajax_ihd_vip_pause_subscription',  array( $this, 'handle_pause' ) );
         add_action( 'wp_ajax_ihd_vip_resume_subscription', array( $this, 'handle_resume' ) );
-        add_action( self::CRON_HOOK, array( $this, 'auto_resume' ), 10, 1 );
+
+        // Daily batch auto-resume. Schedule this action externally via Action
+        // Scheduler (action name: ihd_vip_auto_resume_subscription, recurring: daily).
+        add_action( self::CRON_HOOK, array( __CLASS__, 'batch_auto_resume' ) );
     }
 
     /* ──────────────────────────────────────────────────────────────────────────
@@ -71,9 +79,6 @@ final class IHD_VIP_Pause_Handler {
         $subscription->update_meta_data( self::META_RESUME_DATE, $resume_date );
         $subscription->save();
 
-        // Schedule auto-resume via WP Cron.
-        wp_schedule_single_event( $resume_time, self::CRON_HOOK, array( $subscription_id ) );
-
         // Log to audit table if available.
         if ( class_exists( 'IHD_VIP_Audit_Logger' ) ) {
             IHD_VIP_Audit_Logger::log( array(
@@ -120,18 +125,7 @@ final class IHD_VIP_Pause_Handler {
         $subscription->update_status( 'active', 'Resumed by customer via VIP portal.' );
 
         // Clean up pause metadata.
-        $subscription->delete_meta_data( self::META_PAUSED_BY_VIP );
-        $subscription->delete_meta_data( self::META_PAUSE_DAYS );
-        $subscription->delete_meta_data( self::META_PAUSE_DATE );
-        $subscription->delete_meta_data( self::META_RESUME_DATE );
-        $subscription->save();
-
-        // Unschedule the auto-resume cron if it's still pending.
-        wp_unschedule_event(
-            wp_next_scheduled( self::CRON_HOOK, array( $subscription_id ) ) ?: 0,
-            self::CRON_HOOK,
-            array( $subscription_id )
-        );
+        self::clear_pause_meta( $subscription );
 
         // Log to audit table if available.
         if ( class_exists( 'IHD_VIP_Audit_Logger' ) ) {
@@ -150,26 +144,62 @@ final class IHD_VIP_Pause_Handler {
     }
 
     /* ──────────────────────────────────────────────────────────────────────────
-     * WP Cron: Auto-resume a paused subscription after the pause period ends.
+     * Daily batch: Auto-resume all VIP-paused subscriptions whose resume date
+     * has passed. Schedule this as a daily recurring Action Scheduler event
+     * with action name: ihd_vip_auto_resume_subscription
      * ────────────────────────────────────────────────────────────────────────── */
-    public function auto_resume( $subscription_id ) {
-        $subscription = wcs_get_subscription( $subscription_id );
-        if ( ! $subscription ) {
+    public static function batch_auto_resume() {
+        global $wpdb;
+
+        $now = current_time( 'mysql', true );
+
+        // Find all on-hold subscriptions paused via VIP portal whose resume date <= now.
+        $subscription_ids = $wpdb->get_col( $wpdb->prepare(
+            "SELECT p.ID
+             FROM {$wpdb->posts} p
+             INNER JOIN {$wpdb->postmeta} pm_paused ON p.ID = pm_paused.post_id
+                AND pm_paused.meta_key = %s AND pm_paused.meta_value = '1'
+             INNER JOIN {$wpdb->postmeta} pm_resume ON p.ID = pm_resume.post_id
+                AND pm_resume.meta_key = %s AND pm_resume.meta_value <= %s
+             WHERE p.post_type = 'shop_subscription'
+               AND p.post_status = 'wc-on-hold'
+             LIMIT 100",
+            self::META_PAUSED_BY_VIP,
+            self::META_RESUME_DATE,
+            $now
+        ) );
+
+        if ( empty( $subscription_ids ) ) {
             return;
         }
 
-        // Only auto-resume if still on-hold AND was paused via VIP portal.
-        if ( 'on-hold' !== $subscription->get_status() ) {
-            return;
+        $logger = wc_get_logger();
+
+        foreach ( $subscription_ids as $sub_id ) {
+            $subscription = wcs_get_subscription( $sub_id );
+            if ( ! $subscription ) {
+                continue;
+            }
+
+            // Double-check: still on-hold and still VIP-paused.
+            if ( 'on-hold' !== $subscription->get_status() ) {
+                continue;
+            }
+            if ( '1' !== $subscription->get_meta( self::META_PAUSED_BY_VIP ) ) {
+                continue;
+            }
+
+            $subscription->update_status( 'active', 'Auto-resumed after VIP pause period ended.' );
+            self::clear_pause_meta( $subscription );
+
+            $logger->info( sprintf( 'VIP auto-resume: subscription #%d reactivated.', $sub_id ), array( 'source' => 'ihd-vip-pause' ) );
         }
+    }
 
-        if ( '1' !== $subscription->get_meta( self::META_PAUSED_BY_VIP ) ) {
-            return;
-        }
-
-        $subscription->update_status( 'active', 'Auto-resumed after VIP pause period ended.' );
-
-        // Clean up metadata.
+    /**
+     * Clear all VIP pause metadata from a subscription.
+     */
+    private static function clear_pause_meta( $subscription ) {
         $subscription->delete_meta_data( self::META_PAUSED_BY_VIP );
         $subscription->delete_meta_data( self::META_PAUSE_DAYS );
         $subscription->delete_meta_data( self::META_PAUSE_DATE );
