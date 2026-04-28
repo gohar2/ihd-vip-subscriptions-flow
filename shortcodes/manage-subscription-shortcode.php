@@ -1669,7 +1669,7 @@ JS;
               const varId = card.getAttribute('data-variation-id');
               plansWrap.querySelectorAll('[data-plan]').forEach(p => {
                 if (p.classList.contains('plan-current')) return;
-                const isSel = p.getAttribute('data-plan') === name;
+                const isSel = p.getAttribute('data-variation-id') === varId;
                 p.setAttribute('data-selected', isSel ? '1' : '0');
                 const btn = p.querySelector('.choose');
                 if (btn) btn.textContent = isSel ? 'Selected' : 'Choose ' + p.getAttribute('data-plan');
