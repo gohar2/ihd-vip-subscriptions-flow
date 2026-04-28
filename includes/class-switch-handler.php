@@ -16,6 +16,44 @@ final class IHD_VIP_Switch_Handler {
         add_action( 'wp_ajax_ihd_vip_prepare_switch', array( $this, 'handle_prepare_switch' ) );
         add_action( 'wp_ajax_ihd_vip_checkout_page',  array( $this, 'render_checkout_page' ) );
         add_action( 'wp_ajax_ihd_vip_check_switch_complete', array( $this, 'check_switch_complete' ) );
+
+        // Hook BEFORE WCS (priority 5) to inject switch data directly.
+        // WCS 8.3.0+ uses filter_input_array(INPUT_GET) which ignores $_GET modifications.
+        add_filter( 'woocommerce_add_cart_item_data', array( $this, 'inject_switch_data' ), 5, 3 );
+    }
+
+    /**
+     * Inject subscription_switch data directly into cart item data.
+     *
+     * WCS 8.3.0+ uses Request::get_var() which internally calls filter_input_array(INPUT_GET).
+     * This reads from the actual HTTP request input stream, NOT from the $_GET superglobal.
+     * Therefore, programmatically setting $_GET['switch-subscription'] no longer works.
+     *
+     * This method hooks at priority 5 (before WCS at priority 10) to inject the switch data
+     * directly, bypassing the need for $_GET manipulation.
+     */
+    public function inject_switch_data( $cart_item_data, $product_id, $variation_id ) {
+        $transient_key = 'ihd_vip_switch_' . get_current_user_id();
+        $switch_data   = get_transient( $transient_key );
+
+        if ( ! $switch_data || ! is_array( $switch_data ) ) {
+            return $cart_item_data;
+        }
+
+        if ( (int) $switch_data['variation_id'] !== (int) $variation_id ) {
+            return $cart_item_data;
+        }
+
+        $cart_item_data['subscription_switch'] = array(
+            'subscription_id'        => (int) $switch_data['subscription_id'],
+            'item_id'                => (int) $switch_data['item_id'],
+            'next_payment_timestamp' => (int) $switch_data['next_payment_timestamp'],
+            'upgraded_or_downgraded' => '',
+        );
+
+        delete_transient( $transient_key );
+
+        return $cart_item_data;
     }
 
     /* ──────────────────────────────────────────────────────────────────────────
@@ -79,10 +117,23 @@ final class IHD_VIP_Switch_Handler {
         // Clear the cart and add the switch item.
         WC()->cart->empty_cart();
 
-        // Set the WCS switch GET parameters so the hooks pick them up.
-        $_GET['switch-subscription'] = $subscription_id;
-        $_GET['item']                = $switch_item_id;
-        $_GET['_wcsnonce']           = wp_create_nonce( 'wcs_switch_request' );
+        // Calculate next payment timestamp (WCS needs this for proration calculations).
+        $next_payment_timestamp = $subscription->get_time( 'next_payment' );
+        if ( ! $next_payment_timestamp ) {
+            $next_payment_timestamp = $subscription->get_time( 'end' );
+        }
+
+        // Store switch data in transient for inject_switch_data() to pick up.
+        // WCS 8.3.0+ uses filter_input_array(INPUT_GET) in Request::get_var() which reads
+        // from the actual HTTP input stream, not $_GET. Our priority-5 filter injects
+        // subscription_switch data into cart_item_data before WCS runs at priority 10.
+        $transient_key = 'ihd_vip_switch_' . $user_id;
+        set_transient( $transient_key, array(
+            'subscription_id'        => $subscription_id,
+            'item_id'                => $switch_item_id,
+            'variation_id'           => $target_variation_id,
+            'next_payment_timestamp' => $next_payment_timestamp,
+        ), 5 * MINUTE_IN_SECONDS );
 
         // Build variation attributes for add_to_cart.
         $attributes = array();
@@ -98,6 +149,7 @@ final class IHD_VIP_Switch_Handler {
         );
 
         if ( ! $added ) {
+            delete_transient( $transient_key );
             $notices = wc_get_notices( 'error' );
             wc_clear_notices();
             $msg = ! empty( $notices ) ? wp_strip_all_tags( $notices[0]['notice'] ?? $notices[0] ) : 'Could not add switch item to cart.';
@@ -417,6 +469,7 @@ final class IHD_VIP_Switch_Handler {
                 'period'       => $period ?: 'month',
                 'interval'     => $interval ?: '1',
                 'attributes'   => $variation->get_variation_attributes(),
+                'benefits'     => self::get_variation_benefits( $var_id ),
                 'is_current'   => ( $var_id === (int) $current_variation_id ),
             );
         }
@@ -431,15 +484,21 @@ final class IHD_VIP_Switch_Handler {
 
     /**
      * Build a human-readable label for a variation.
-     * Uses the "membership-level" attribute if present, otherwise falls back to
-     * the variation's formatted name.
+     * Uses the "membership-level" attribute term name if present, otherwise falls
+     * back to the variation's formatted name.
      */
     public static function get_variation_label( $variation ) {
         $attrs = $variation->get_variation_attributes();
 
         // Prioritise the membership-level attribute (common across both products).
+        // Resolve the attribute slug to the taxonomy term name so renames flow
+        // through automatically (e.g. "hero" → "Bronze").
         $level = $attrs['attribute_pa_membership-level'] ?? '';
         if ( $level ) {
+            $term = get_term_by( 'slug', $level, 'pa_membership-level' );
+            if ( $term && ! is_wp_error( $term ) ) {
+                return $term->name;
+            }
             return ucwords( str_replace( '-', ' ', $level ) );
         }
 
@@ -450,6 +509,21 @@ final class IHD_VIP_Switch_Handler {
             $name = trim( str_replace( $parent->get_name() . ' -', '', $name ), ' -' );
         }
         return $name ?: 'Plan #' . $variation->get_id();
+    }
+
+    /**
+     * Parse the `_subscription_details` meta into an array of benefit lines.
+     * The field is free-text with one benefit per line.
+     */
+    public static function get_variation_benefits( $variation_id ) {
+        $raw = get_post_meta( $variation_id, '_subscription_details', true );
+        if ( ! is_string( $raw ) || '' === trim( $raw ) ) {
+            return array();
+        }
+
+        $lines = preg_split( '/\r\n|\r|\n/', $raw );
+        $lines = array_map( 'trim', $lines );
+        return array_values( array_filter( $lines, 'strlen' ) );
     }
 
     /**

@@ -1029,3 +1029,37 @@ JS;
 CSS;
     }
 }
+
+// ─── DISPLAY FIELD ───
+add_action('woocommerce_product_after_variable_attributes', 'ihd_add_vip_custom_variation_fields', 10, 3);
+function ihd_add_vip_custom_variation_fields($loop, $variation_data, $variation) {
+    $parent_product = wc_get_product($variation->post_parent);
+    if (!$parent_product || $parent_product->get_type() !== 'variable-subscription') {
+        return;
+    }
+
+    $variation_id = $variation->ID;
+    $subscription_details = get_post_meta($variation_id, '_subscription_details', true);
+    ?>
+    <div class="form-row form-row-full" style="padding: 10px 20px; background: #f0f6fc; border-left: 3px solid #2271b1; margin: 10px 20px;">
+        <p style="margin: 0 0 8px; font-weight: 600; color: #2271b1;">Subscription Info</p>
+
+        <p class="form-field">
+            <label for="subscription_details_<?php echo esc_attr($variation_id); ?>">Subscription Details</label>
+            <textarea
+                id="subscription_details_<?php echo esc_attr($variation_id); ?>"
+                name="subscription_details[<?php echo esc_attr($loop); ?>]"
+                rows="3"
+                style="width: 100%;"
+            ><?php echo esc_textarea($subscription_details); ?></textarea>
+        </p>
+    </div>
+    <?php
+}
+
+// ─── SAVE FIELD ───
+add_action('woocommerce_save_product_variation', 'ihd_save_vip_custom_variation_fields', 10, 2);
+function ihd_save_vip_custom_variation_fields($variation_id, $loop) {
+    $subscription_details = isset($_POST['subscription_details'][$loop]) ? sanitize_textarea_field($_POST['subscription_details'][$loop]) : '';
+    update_post_meta($variation_id, '_subscription_details', $subscription_details);
+}

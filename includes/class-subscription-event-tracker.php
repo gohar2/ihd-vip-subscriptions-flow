@@ -219,13 +219,21 @@ class IHD_VIP_Subscription_Event_Tracker {
     /**
      * Alternative hook for payment failures (some gateways use this).
      *
+     * The `woocommerce_subscription_payment_failed` hook fires with
+     * ($subscription, $new_status) — the second argument is the new status
+     * STRING, not a WC_Order. Look up the last related order ourselves.
+     *
      * @param WC_Subscription $subscription The subscription.
-     * @param WC_Order|null   $order        The order that failed.
+     * @param string          $new_status   The new subscription status.
      */
-    public function on_payment_failed( $subscription, $order ) {
-        // Avoid double-logging if renewal_payment_failed already fired.
-        // We use a transient as a simple dedup mechanism.
-        $sub_id = $subscription->get_id();
+    public function on_payment_failed( $subscription, $new_status = '' ) {
+        if ( ! is_object( $subscription ) || ! method_exists( $subscription, 'get_id' ) ) {
+            return;
+        }
+
+        $order = $this->get_last_renewal_order( $subscription );
+
+        $sub_id    = $subscription->get_id();
         $dedup_key = 'ihd_pf_logged_' . $sub_id . '_' . ( $order ? $order->get_id() : 0 );
 
         if ( get_transient( $dedup_key ) ) {

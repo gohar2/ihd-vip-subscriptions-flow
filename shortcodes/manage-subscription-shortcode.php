@@ -101,7 +101,7 @@ JS;
         $subscription_obj = wcs_get_subscription( $subscription_id );
         if ( $subscription_obj && (int) $subscription_obj->get_customer_id() === get_current_user_id() ) {
             $sub_status   = $subscription_obj->get_status();
-            $is_valid_sub = in_array( $sub_status, array( 'active', 'on-hold' ), true );
+            $is_valid_sub = in_array( $sub_status, array( 'active', 'on-hold', 'pending-cancel', 'cancelled' ), true );
         }
     }
 
@@ -118,6 +118,30 @@ JS;
     if ( class_exists( 'IHD_VIP_Pause_Handler' ) ) {
         $is_paused     = IHD_VIP_Pause_Handler::is_vip_paused( $subscription_obj );
         $pause_details = IHD_VIP_Pause_Handler::get_pause_details( $subscription_obj );
+    }
+
+    /* ── Cancellation state detection ──
+     * pending-cancel: user cancelled, still has access until end of billing period
+     * cancelled:      access has ended (or was ended immediately)
+     * We compute the end date and whether access has already lapsed so the
+     * Current Plan bar can show "Access ends on …" vs "Your membership ended on …".
+     */
+    $is_cancelled       = in_array( $sub_status, array( 'pending-cancel', 'cancelled' ), true );
+    $cancel_end_ts      = 0;
+    $cancel_end_nice    = '';
+    $cancel_access_over = false;
+    if ( $is_cancelled ) {
+        $end_date_str = $subscription_obj->get_date( 'end' );
+        if ( ! $end_date_str ) {
+            $end_date_str = $subscription_obj->get_date( 'cancelled' );
+        }
+        if ( $end_date_str ) {
+            $cancel_end_ts   = strtotime( $end_date_str );
+            $cancel_end_nice = date_i18n( 'F j, Y', $cancel_end_ts );
+        }
+        // Access is over if status is fully cancelled, or pending-cancel but end date has passed.
+        $cancel_access_over = ( 'cancelled' === $sub_status )
+            || ( $cancel_end_ts && $cancel_end_ts <= current_time( 'timestamp' ) );
     }
 
     /* ── Resolve subscription product & sibling variations dynamically ── */
@@ -147,27 +171,34 @@ JS;
                     $current_plan = IHD_VIP_Switch_Handler::get_variation_label( $current_var ) . ' Membership';
                 }
 
-                // Fetch sibling variations matching the same billing period.
+                // Fetch all sibling variations across every billing period so
+                // monthly customers see annual options and vice-versa.
                 $sibling_variations = IHD_VIP_Switch_Handler::get_sibling_variations(
                     $sub_product_id,
-                    $current_variation_id,
-                    $sub_period // 'month' or 'year'
+                    $current_variation_id
                 );
 
-                // If the product has only 1 variant for the current period (e.g. a
-                // legacy product with just "Monthly"), show the OTHER period's
-                // variants instead so the user can switch monthly↔annual.
-                if ( count( $sibling_variations ) < 2 ) {
-                    $alt_period = ( 'month' === $sub_period ) ? 'year' : 'month';
-                    $alt_variations = IHD_VIP_Switch_Handler::get_sibling_variations(
-                        $sub_product_id,
-                        $current_variation_id,
-                        $alt_period
-                    );
-                    if ( ! empty( $alt_variations ) ) {
-                        $sibling_variations = $alt_variations;
-                    }
-                }
+                // // Fetch sibling variations matching the same billing period.
+                // $sibling_variations = IHD_VIP_Switch_Handler::get_sibling_variations(
+                //     $sub_product_id,
+                //     $current_variation_id,
+                //     $sub_period // 'month' or 'year'
+                // );
+                //
+                // // If the product has only 1 variant for the current period (e.g. a
+                // // legacy product with just "Monthly"), show the OTHER period's
+                // // variants instead so the user can switch monthly↔annual.
+                // if ( count( $sibling_variations ) < 2 ) {
+                //     $alt_period = ( 'month' === $sub_period ) ? 'year' : 'month';
+                //     $alt_variations = IHD_VIP_Switch_Handler::get_sibling_variations(
+                //         $sub_product_id,
+                //         $current_variation_id,
+                //         $alt_period
+                //     );
+                //     if ( ! empty( $alt_variations ) ) {
+                //         $sibling_variations = $alt_variations;
+                //     }
+                // }
             }
         }
     }
@@ -359,6 +390,7 @@ JS;
           margin-top: 2px !important;
           display: block !important;
           visibility: visible !important;
+          text-align: left;
         }
         #<?php echo esc_attr($uid); ?> .chev {
           width: 20px !important; height: 20px !important;
@@ -1032,6 +1064,72 @@ JS;
           animation: ihd-spin .6s linear infinite;
         }
         @keyframes ihd-spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 767px) {
+          #<?php echo esc_attr($uid); ?>.ifx-hvp {
+            margin-top: 40px !important;
+          }
+          #<?php echo esc_attr($uid); ?> .carousel {
+            border-radius: 16px !important;
+          }
+          #<?php echo esc_attr($uid); ?> .slide {
+            aspect-ratio: 3/4 !important;
+            min-height: 0 !important;
+          }
+          #<?php echo esc_attr($uid); ?> .slide img {
+            object-fit: cover;
+            object-position: center top;
+          }
+          #<?php echo esc_attr($uid); ?> .overlay {
+            padding: 20px !important;
+            background: linear-gradient(to top, rgba(0,0,0,.85) 0%, rgba(0,0,0,.6) 55%, transparent 100%) !important;
+          }
+          #<?php echo esc_attr($uid); ?> .quote {
+            font-size: 16px !important;
+          }
+          #<?php echo esc_attr($uid); ?> .who2 {
+            font-size: 14px !important;
+          }
+          #<?php echo esc_attr($uid); ?> .navbtn {
+            width: 30px !important; height: 30px !important;
+            min-width: 30px !important; max-width: 30px !important;
+            min-height: 30px !important; max-height: 30px !important;
+          }
+          #<?php echo esc_attr($uid); ?> .navbtn.prev {
+            left: 0px !important;
+          }
+          #<?php echo esc_attr($uid); ?> .navbtn.next {
+            right: 0px !important;
+          }
+          #<?php echo esc_attr($uid); ?> .navbtn svg {
+            width: 16px !important; height: 16px !important;
+          }
+          #<?php echo esc_attr($uid); ?> .currentbar {
+            padding: 12px !important;
+            align-items: flex-start !important;
+          }
+          #<?php echo esc_attr($uid); ?> .acc-h {
+            padding: 12px !important;
+            gap: 8px !important;
+            align-items: flex-start;
+          }
+          #<?php echo esc_attr($uid); ?> .acc-left {
+            gap: 12px !important;
+          }
+          #<?php echo esc_attr($uid); ?> .acc-title,
+          #<?php echo esc_attr($uid); ?> .section .acc-title,
+          #<?php echo esc_attr($uid); ?> .section .acc-h .acc-title,
+          #<?php echo esc_attr($uid); ?> h2.acc-title {
+            font-size: 14px !important;
+            text-align: left;
+          }
+          #<?php echo esc_attr($uid); ?> .acc-sub {
+            text-align: left;
+          }
+          #<?php echo esc_attr($uid); ?> .topbar {
+            margin-top: 12px !important;
+          }
+        }
       </style>
 
       <div class="wrap">
@@ -1059,13 +1157,29 @@ JS;
             </svg>
           </div>
           <div>
-            <p class="t1">Current Plan: <?php echo $current_plan; ?></p>
-            <div class="t2"><?php echo $current_price; ?>/<?php echo strtolower($current_interval); ?> · Next billing date: <?php echo $next_bill; ?></div>
+            <?php if ( $is_cancelled ) : ?>
+              <p class="t1">Cancelled Plan: <?php echo $current_plan; ?></p>
+              <div class="t2">
+                <?php echo $current_price; ?>/<?php echo strtolower($current_interval); ?>
+                <?php if ( $cancel_end_nice ) : ?>
+                  &middot;
+                  <?php if ( $cancel_access_over ) : ?>
+                    Your membership ended on <?php echo esc_html( $cancel_end_nice ); ?>
+                  <?php else : ?>
+                    Access ends on <?php echo esc_html( $cancel_end_nice ); ?>
+                  <?php endif; ?>
+                <?php endif; ?>
+              </div>
+            <?php else : ?>
+              <p class="t1">Current Plan: <?php echo $current_plan; ?></p>
+              <div class="t2"><?php echo $current_price; ?>/<?php echo strtolower($current_interval); ?> · Next billing date: <?php echo $next_bill; ?></div>
+            <?php endif; ?>
           </div>
         </div>
 
         <div class="ihd-acc-sections" style="display:flex; flex-direction:column;">
 
+        <?php if ( ! $is_cancelled ) : ?>
         <!-- ═══ Accordion: Upgrade/Downgrade ═══ -->
         <section class="section" style="order:1;" data-acc data-acc-id="upgrade-downgrade" data-open="0">
           <button class="acc-h" type="button" data-acc-toggle aria-expanded="false">
@@ -1090,22 +1204,17 @@ JS;
             <div class="acc-inner">
               <?php
               /*
-               * ── Tier benefit descriptions ──
-               * Keyed by the membership-level attribute slug.
-               * Falls back gracefully if a slug has no entry.
+               * ── Tier theming ──
+               * Benefits + the tier label are sourced from the variation itself
+               * (term name for the label, `_subscription_details` meta for the
+               * bullet list). CSS class is derived from the label so renames
+               * flow through automatically (Bronze → .bronze, etc.).
                */
-              $tier_benefits = array(
-                  'hero'       => array( '10% off all purchases', 'Free shipping on orders $25+', '5 meals donated monthly' ),
-                  'super-hero' => array( '15% off all purchases', 'Free shipping on all orders', '15 meals donated monthly', 'Early access to new products' ),
-                  'saint'      => array( '25% off all purchases', 'Free shipping on all orders', '50 meals donated monthly', 'Early access to new products', 'Exclusive VIP-only deals', 'Priority customer support' ),
-              );
               $tier_icons = array(
-                  'hero'       => '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>',
-                  'super-hero' => '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>',
-                  'saint'      => '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>',
+                  'bronze' => '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>',
+                  'silver' => '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>',
+                  'gold'   => '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z"/><path d="M5 21h14"/></svg>',
               );
-              /* CSS class mapping for plan card colour theming */
-              $tier_css = array( 'hero' => 'bronze', 'super-hero' => 'silver', 'saint' => 'gold' );
               /* Default icon for tiers not in the icon map */
               $default_icon = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>';
               $check_svg = '<svg class="check" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
@@ -1113,10 +1222,9 @@ JS;
               if ( ! empty( $sibling_variations ) ) : ?>
               <div class="plans" data-plans>
                 <?php foreach ( $sibling_variations as $idx => $sib ) :
-                    $slug        = $sib['slug'];
-                    $css_class   = $tier_css[ $slug ] ?? 'bronze';
-                    $benefits    = $tier_benefits[ $slug ] ?? array();
-                    $icon        = $tier_icons[ $slug ] ?? $default_icon;
+                    $css_class   = sanitize_html_class( strtolower( $sib['label'] ) ) ?: 'bronze';
+                    $benefits    = ! empty( $sib['benefits'] ) ? $sib['benefits'] : array();
+                    $icon        = $tier_icons[ $css_class ] ?? $default_icon;
                     $is_current  = $sib['is_current'];
                     $period_label = ( 'year' === $sib['period'] ) ? 'Annual' : 'Monthly';
                 ?>
@@ -1183,7 +1291,9 @@ JS;
             </div>
           </div>
         </section>
+        <?php endif; /* ! $is_cancelled — end Upgrade/Downgrade */ ?>
 
+        <?php if ( ! $is_cancelled ) : ?>
         <!-- ═══ Accordion: Pause ═══ -->
         <section class="section" style="order:<?php echo $is_paused ? '0' : '2'; ?>;" data-acc data-acc-id="pause" data-open="<?php echo $is_paused ? '1' : '0'; ?>">
           <button class="acc-h" type="button" data-acc-toggle aria-expanded="<?php echo $is_paused ? 'true' : 'false'; ?>">
@@ -1305,6 +1415,9 @@ JS;
           </div>
         </section>
 
+        <?php endif; /* ! $is_cancelled — end Pause */ ?>
+
+        <?php if ( ! $is_cancelled ) : ?>
         <!-- ═══ Accordion: Cancel — inline multi-step ═══ -->
         <section class="section" style="order:3;" data-acc data-acc-id="cancel" data-open="0" data-cancel-section>
           <button class="acc-h" type="button" data-acc-toggle aria-expanded="false">
@@ -1406,6 +1519,7 @@ JS;
             </div>
           </div>
         </section>
+        <?php endif; /* ! $is_cancelled — end Cancel */ ?>
 
         </div><!-- /.ihd-acc-sections -->
 
@@ -1677,6 +1791,9 @@ JS;
                   '<p style="margin-top:16px;"><a href="/my-account/subscriptions/" style="color:var(--brand-red);font-weight:600;text-decoration:none;">View My Subscriptions &rarr;</a></p>' +
                 '</div>';
             }
+
+            /* Reload so the Current Plan header and all other sections reflect the new plan */
+            setTimeout(function() { window.location.reload(); }, 2500);
           }
 
           if (checkoutClose) {
@@ -1754,6 +1871,8 @@ JS;
                 .then(r => r.json())
                 .then(data => {
                   if (data.success) {
+                    /* Reload so the section header flips to "Resume My Membership" */
+                    setTimeout(function() { window.location.reload(); }, 2500);
                     if (pauseDaysDone) pauseDaysDone.textContent = pauseDays;
                     if (pauseForm) pauseForm.style.display = 'none';
                     if (pauseSuccess) pauseSuccess.classList.add('show');
@@ -1816,6 +1935,8 @@ JS;
                     if (resumeSection) resumeSection.style.display = 'none';
                     if (resumeOverlay) resumeOverlay.style.display = 'none';
                     if (resumeSuccess) resumeSuccess.classList.add('show');
+                    /* Reload so the Current Plan header reflects the resumed (active) status */
+                    setTimeout(function() { window.location.reload(); }, 2500);
                   } else {
                     resumeYes.disabled = false;
                     resumeYes.textContent = 'Yes, Resume Now';
@@ -1908,6 +2029,8 @@ JS;
                   hideOverlay();
                   if (data.success) {
                     showCancelStep('done');
+                    /* Reload so the Current Plan header and section visibility reflect the cancellation */
+                    setTimeout(function() { window.location.reload(); }, 2500);
                   } else {
                     doCancelBtn.disabled = false;
                     doCancelBtn.textContent = 'Confirm Cancellation';

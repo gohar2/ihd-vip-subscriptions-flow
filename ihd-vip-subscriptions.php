@@ -2,7 +2,7 @@
 /**
  * Plugin Name: IHD VIP Subscriptions
  * Description: VIP Subscription Modal Interception & Inline Switch System
- * Version: 1.1.0
+ * Version: 1.2.2
  * Author: Syed
  * Requires at least: 5.8
  * Requires PHP: 7.4
